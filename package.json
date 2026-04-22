@@ -1,0 +1,22 @@
+{
+  "name": "statera",
+  "version": "1.0.0",
+  "description": "Statera — portfolio & CS skin tracker",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "concurrently \"node server.js\" \"cd frontend && npm run dev\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "better-sqlite3": "^9.4.3",
+    "express": "^5.2.1",
+    "yahoo-finance2": "^3.13.2"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
