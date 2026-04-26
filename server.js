@@ -159,7 +159,7 @@ app.get('/api/users', (req, res) => {
   const users = loadUsers();
   res.json(users.map(u => {
     const p = loadProfile(u.username);
-    return { username: u.username, bio: p.bio, publicInventory: p.publicInventory, steamId: p.publicInventory ? p.steamId : null, createdAt: u.createdAt };
+    return { username: u.username, bio: p.bio, publicInventory: p.publicInventory, publicHoldings: p.publicHoldings, steamId: p.publicInventory ? p.steamId : null, avatarBase64: p.avatarBase64 || null, createdAt: u.createdAt };
   }));
 });
 
@@ -167,14 +167,14 @@ app.get('/api/users/:username/profile', (req, res) => {
   const user = findUser(req.params.username);
   if (!user) return res.status(404).json({ error: 'User not found' });
   const p = loadProfile(user.username);
-  res.json({ username: user.username, bio: p.bio, publicInventory: p.publicInventory, steamId: p.publicInventory ? p.steamId : null, createdAt: user.createdAt });
+  res.json({ username: user.username, bio: p.bio, publicInventory: p.publicInventory, publicHoldings: p.publicHoldings, steamId: p.publicInventory ? p.steamId : null, avatarBase64: p.avatarBase64 || null, createdAt: user.createdAt });
 });
 
 app.put('/api/users/:username/profile', requireUser, (req, res) => {
   if (req.username !== req.params.username) return res.status(403).json({ error: 'Cannot edit another user\'s profile.' });
-  const { bio, steamId, publicInventory } = req.body;
+  const { bio, steamId, publicInventory, publicHoldings, avatarBase64 } = req.body;
   const current = loadProfile(req.username);
-  const updated = { ...current, bio: bio ?? current.bio, steamId: steamId ?? current.steamId, publicInventory: publicInventory ?? current.publicInventory };
+  const updated = { ...current, bio: bio ?? current.bio, steamId: steamId ?? current.steamId, publicInventory: publicInventory ?? current.publicInventory, publicHoldings: publicHoldings ?? current.publicHoldings, avatarBase64: avatarBase64 !== undefined ? avatarBase64 : current.avatarBase64 };
   saveProfile(req.username, updated);
   res.json({ success: true, profile: updated });
 });
@@ -201,6 +201,30 @@ app.get('/api/users/:username/inventory', async (req, res) => {
     const valid = items.filter(i => i.name !== 'Unknown');
     res.json({ items: valid, totalValue: valid.reduce((s, i) => s + i.priceSEK, 0), count: valid.length });
   } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Public holdings endpoint ──────────────────────────────────────────────
+app.get('/api/users/:username/holdings', async (req, res) => {
+  const user = findUser(req.params.username);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  const p = loadProfile(user.username);
+  
+  // FIXED: Changed ' to " or escaped the apostrophe
+  if (!p.publicHoldings) return res.status(403).json({ error: "This user's holdings are private." });
+
+  // Return reconstructed portfolio for display (no prices, just tickers/quantities)
+  const txs = loadTransactions(user.username);
+  const normalised = txs.map(t => ({ ...t, ticker: (t.ticker || t.rawTicker || '').trim() }));
+  const trades = normalised.filter(t => (t.type === 'buy' || t.type === 'sell') && t.ticker).sort((a, b) => a.date.localeCompare(b.date));
+  const holdings = {};
+  for (const tx of trades) {
+    const { ticker, quantity, price } = tx;
+    if (!holdings[ticker]) holdings[ticker] = { ticker, quantity: 0, totalCost: 0 };
+    const h = holdings[ticker];
+    if (quantity > 0) { h.totalCost += quantity * (price || 0); h.quantity += quantity; }
+    else { const sellQty = Math.abs(quantity); const avg = h.quantity > 0 ? h.totalCost / h.quantity : 0; h.totalCost = Math.max(0, h.totalCost - sellQty * avg); h.quantity -= sellQty; }
+  }
+  res.json(Object.values(holdings).filter(h => h.quantity > 0.001).map(h => ({ ticker: h.ticker, quantity: parseFloat(h.quantity.toFixed(4)) })));
 });
 
 // ── Ticker resolution ──────────────────────────────────────────────────────
@@ -821,4 +845,4 @@ app.use((req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Statera server running on http://localhost:${PORT}`));
+app.listen(PORT, () => console.log(`Statera server running on http://localhost:${PORT}`))

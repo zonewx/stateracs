@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import CSSkins from './CSSkins';
 import ProfilePage from './ProfilePage';
+import GlobalBar from './GlobalBar';
 
 export default function App() {
   // ── Auth ───────────────────────────────────────────────────────────────────
@@ -12,6 +13,7 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [homeApp, setHomeApp] = useState(null);
+  const [viewProfileUser, setViewProfileUser] = useState(null);
 
   // ── Core state ─────────────────────────────────────────────────────────────
   const [portfolio, setPortfolio] = useState(() => JSON.parse(localStorage.getItem('portfolio')) || []);
@@ -104,7 +106,7 @@ export default function App() {
     sessionStorage.removeItem('auth_user');
     setAuthStatus('logged-out'); setAuthUsername('');
     setAuthForm({ username: '', password: '', confirmPassword: '', newPassword: '' });
-    setHomeApp(null); setPortfolio([]); setDashboardData(null);
+    setHomeApp(null); setViewProfileUser(null); setPortfolio([]); setDashboardData(null);
   };
 
   const handleChangePassword = async () => {
@@ -116,6 +118,14 @@ export default function App() {
       setShowChangePassword(false); setAuthForm(f => ({ ...f, password: '', newPassword: '' }));
     } catch { setAuthError('Failed.'); }
     setAuthLoading(false);
+  };
+
+  // ── Navigation handler ────────────────────────────────────────────────────
+  const handleNavigate = (dest, param = null) => {
+    if (dest === 'home') { setHomeApp(null); setViewProfileUser(null); }
+    else if (dest === 'profile') { setHomeApp('profile'); setViewProfileUser(null); }
+    else if (dest === 'view-profile') { setHomeApp('profile'); setViewProfileUser(param); }
+    else setHomeApp(dest);
   };
 
   // ── Data fetching ──────────────────────────────────────────────────────────
@@ -284,7 +294,7 @@ export default function App() {
               <svg width="32" height="32" viewBox="0 0 28 28" fill="none"><rect width="28" height="28" rx="6" fill="rgba(255,255,255,0.15)"/><path d="M6 18l4-5 4 3 4-6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><path d="M18 10l2.5-2.5M20.5 7.5l-2 0M20.5 7.5l0 2" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
               <span className="text-2xl font-bold text-white tracking-tight">Statera</span>
             </div>
-            <p className="text-blue-200 text-sm">{isSignup ? 'Create your account' : 'Welcome back'} </p>
+            <p className="text-blue-200 text-sm">{isSignup ? 'Create your account' : 'Welcome back'}</p>
           </div>
           <div className="p-8">
             {authError && <div className="bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3 mb-5 text-sm text-red-400">{authError}</div>}
@@ -312,18 +322,32 @@ export default function App() {
   }
 
   // ── App routing ────────────────────────────────────────────────────────────
-  if (homeApp === 'skins') return <CSSkins isDark={isDark} onBack={() => setHomeApp(null)} authUsername={authUsername} />;
-  if (homeApp === 'profile') return <ProfilePage isDark={isDark} onBack={() => setHomeApp(null)} authUsername={authUsername} />;
+  if (homeApp === 'skins') return (
+    <div className={`flex flex-col h-screen pt-12 ${isDark ? 'bg-gray-900' : 'bg-gray-100'}`}>
+      <GlobalBar isDark={isDark} authUsername={authUsername} onNavigate={handleNavigate} onLogout={handleLogout} />
+      <CSSkins isDark={isDark} onBack={() => setHomeApp(null)} authUsername={authUsername} />
+    </div>
+  );
+  if (homeApp === 'profile') return (
+    <div className={`flex flex-col h-screen pt-12 ${isDark ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-900'}`}>
+      <GlobalBar isDark={isDark} authUsername={authUsername} onNavigate={handleNavigate} onLogout={handleLogout} />
+      <div className={`px-8 py-3 border-b flex items-center gap-3 shrink-0 ${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'}`}>
+        {viewProfileUser && <button onClick={() => setViewProfileUser(null)} className={`text-sm ${isDark ? 'text-gray-400 hover:text-white' : 'text-gray-500 hover:text-gray-900'} transition`}>← Back</button>}
+        <h1 className="text-base font-bold">{viewProfileUser ? viewProfileUser : 'My Profile'}</h1>
+      </div>
+      <ProfilePage isDark={isDark} authUsername={authUsername} viewUsername={viewProfileUser} />
+    </div>
+  );
 
   // ── Home screen ────────────────────────────────────────────────────────────
   if (!homeApp) {
     const apps = [
       { id: 'statera', name: 'Statera', desc: 'Portfolio tracker & analytics', color: 'from-blue-600 to-blue-800', icon: <svg width="44" height="44" viewBox="0 0 28 28" fill="none"><rect width="28" height="28" rx="6" fill="#1d4ed8"/><path d="M6 18l4-5 4 3 4-6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>, stats: [{ label: 'Holdings', value: portfolio.length || '—' },{ label: 'Transactions', value: txCount.total || '—' },{ label: 'Dividends YTD', value: dividends?.totalThisYear > 0 ? `${Math.round(dividends.totalThisYear)} kr` : '—' }] },
       { id: 'skins', name: 'CS Skins', desc: 'Track CS inventory, P&L & Steam value', color: 'from-orange-500 to-orange-700', icon: <div className="w-11 h-11 rounded-lg bg-white/20 flex items-center justify-center text-white font-bold text-xl">CS</div>, stats: [] },
-      { id: 'profile', name: 'Profile', desc: 'Your profile & community', color: 'from-purple-600 to-purple-800', icon: <div className="w-11 h-11 rounded-full bg-white/20 flex items-center justify-center text-white font-bold text-2xl">{authUsername[0].toUpperCase()}</div>, stats: [] },
+
     ];
     return (
-      <div className={`min-h-screen ${isDark ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-900'}`}>
+      <div className={`min-h-screen pt-12 ${isDark ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-900'}`}>
         <div className={`flex items-center justify-between px-8 py-4 border-b ${isDark ? 'border-gray-800 bg-gray-900' : 'border-gray-200 bg-white'}`}>
           <div className="flex items-center gap-3">
             <svg width="24" height="24" viewBox="0 0 28 28" fill="none"><rect width="28" height="28" rx="6" fill="#0f1e3c"/><path d="M6 18l4-5 4 3 4-6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
@@ -342,9 +366,9 @@ export default function App() {
             <h1 className="text-3xl font-bold mb-2">Welcome back, {authUsername}</h1>
             <p className={`text-base ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Choose an app to open.</p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             {apps.map(app => (
-              <button key={app.id} onClick={() => setHomeApp(app.id)} className={`text-left rounded-2xl overflow-hidden border transition-all duration-200 group hover:shadow-lg hover:-translate-y-0.5 cursor-pointer ${isDark ? 'bg-gray-800 border-gray-700 hover:border-gray-500' : 'bg-white border-gray-200 hover:border-gray-400'}`}>
+              <button key={app.id} onClick={() => handleNavigate(app.id)} className={`text-left rounded-2xl overflow-hidden border transition-all duration-200 group hover:shadow-lg hover:-translate-y-0.5 cursor-pointer ${isDark ? 'bg-gray-800 border-gray-700 hover:border-gray-500' : 'bg-white border-gray-200 hover:border-gray-400'}`}>
                 <div className={`bg-linear-to-br ${app.color} p-6 flex items-start justify-between`}>
                   <div>{app.icon}</div>
                 </div>
@@ -483,7 +507,8 @@ export default function App() {
   const cardCls = `${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-xl`;
 
   return (
-    <div className={`flex h-screen overflow-hidden ${isDark ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-900'}`}>
+    <div className={`flex h-screen overflow-hidden pt-12 ${isDark ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-900'}`}>
+      <GlobalBar isDark={isDark} authUsername={authUsername} onNavigate={handleNavigate} onLogout={handleLogout} />
       {showShortcuts && <ShortcutsModal />}
 
       {/* SIDEBAR */}
