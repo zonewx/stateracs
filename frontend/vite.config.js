@@ -34,4 +34,8 @@ export default defineConfig({
       },
     },
   },
+  // Required for React Router — serve index.html for all routes
+  preview: {
+    historyApiFallback: true,
+  },
 });
