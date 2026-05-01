@@ -6,16 +6,18 @@ export default defineConfig({
   server: {
     host: true,
     proxy: {
-      // Rule 1: Handle everything that starts with /api
+      // Use the IPv4 address directly to stop the ::1 (IPv6) errors
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://127.0.0.1:3000',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''),
+        secure: false,
+        // Keep rewrite ONLY if your backend routes DON'T start with /api
+        // Based on your terminal, they seem to expect /api/auth/login, etc.
+        // So let's try WITHOUT rewrite first.
       },
-      // Rule 2: Explicitly list every other backend path
-      // This ensures Vite ONLY proxies these specific names
-      '^/(feed|friends|profile|pending-count|announcements|status|count|overrides|portfolio|dividends|login|auth|register|users|mod)': {
-        target: 'http://localhost:3000',
+      // Catch paths that don't start with /api
+      '^/(feed|friends|profile|announcements|status|login|auth)': {
+        target: 'http://127.0.0.1:3000',
         changeOrigin: true,
         secure: false,
       },
