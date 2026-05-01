@@ -17,6 +17,48 @@ if (FRONTEND_DIST && fs.existsSync(FRONTEND_DIST)) {
 const MAX_USERS = 10;
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 
+// ── Auto-Seed Admin Script ────────────────────────────────────────────────
+function setupAdminAccount() {
+  if (fs.existsSync(USERS_FILE)) {
+    const registry = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
+    // Only target the 'admin' account for auto-creation
+    const adminData = registry.find(u => u.username === 'admin');
+
+    if (adminData) {
+      const adminDir = path.join(DATA_DIR, 'users', 'admin');
+      if (!fs.existsSync(adminDir)) {
+        console.log("Initializing admin directory on this machine...");
+        fs.mkdirSync(adminDir, { recursive: true });
+
+        // Create the individual auth.json inside the admin folder
+        const adminAuth = { 
+          username: 'admin', 
+          hash: adminData.hash, 
+          salt: adminData.salt 
+        };
+        fs.writeFileSync(path.join(adminDir, 'auth.json'), JSON.stringify(adminAuth, null, 2));
+
+        // Create default empty files needed for the UI to load without errors
+        const defaultFiles = {
+          'profile.json': { username: 'admin', bio: 'Default Admin Account', createdAt: new Date().toISOString() },
+          'friends.json': { friends: [], incoming: [], outgoing: [] },
+          'activity.json': [],
+          'transactions.json': [],
+          'ticker_cache.json': {},
+          'ticker_overrides.json': {}
+        };
+
+        Object.entries(defaultFiles).forEach(([filename, content]) => {
+          fs.writeFileSync(path.join(adminDir, filename), JSON.stringify(content, null, 2));
+        });
+        console.log("Admin account setup complete.");
+      }
+    }
+  }
+}
+// Run setup immediately on startup
+setupAdminAccount();
+
 // ── User directory helpers ─────────────────────────────────────────────────
 function getUserDir(username) {
   const dir = path.join(DATA_DIR, 'users', username);
@@ -34,6 +76,26 @@ function loadJSON(file, def) {
   return def;
 }
 function saveJSON(file, data) { fs.writeFileSync(file, JSON.stringify(data, null, 2)); }
+
+// ── Sync Security Helper ───────────────────────────────────────────────────
+/**
+ * Updates both the root users.json and the user-specific auth.json
+ */
+function syncUserSecurity(username, newHash, newSalt) {
+  // 1. Update Root registry
+  const users = loadUsers();
+  const user = users.find(u => u.username.toLowerCase() === username.toLowerCase());
+  if (user) {
+    user.hash = newHash;
+    user.salt = newSalt;
+    saveUsers(users);
+  }
+
+  // 2. Update folder-specific auth.json
+  const authPath = userFile(username, 'auth.json');
+  const authData = { username, hash: newHash, salt: newSalt };
+  saveJSON(authPath, authData);
+}
 
 // ── User registry ──────────────────────────────────────────────────────────
 function loadUsers() {
@@ -178,15 +240,18 @@ app.post('/api/auth/login', (req, res) => {
 
 app.post('/api/auth/change-password', requireUser, (req, res) => {
   const { currentPassword, newPassword } = req.body;
-  const users = loadUsers();
-  const user = users.find(u => u.username === req.username);
+  const user = findUser(req.username);
+  
   if (!user) return res.status(404).json({ error: 'User not found.' });
   if (hashPassword(currentPassword, user.salt) !== user.hash) return res.status(401).json({ error: 'Current password is incorrect.' });
   if (!newPassword || newPassword.length < 6) return res.status(400).json({ error: 'New password must be at least 6 characters.' });
+  
   const newSalt = crypto.randomBytes(32).toString('hex');
-  user.hash = hashPassword(newPassword, newSalt);
-  user.salt = newSalt;
-  saveUsers(users);
+  const newHash = hashPassword(newPassword, newSalt);
+  
+  // Updated to use the synchronization helper
+  syncUserSecurity(req.username, newHash, newSalt);
+  
   res.json({ success: true });
 });
 
@@ -1301,5 +1366,4 @@ app.use((req, res, next) => {
 });
 
 const PORT = process.env.PORT || 3000;
-// Adding '0.0.0.0' tells the server to listen to external requests
 app.listen(PORT, '0.0.0.0', () => console.log(`Statera server running on port ${PORT}`));
