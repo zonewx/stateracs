@@ -214,7 +214,7 @@ export default function AdminPanel({ isDark, authUsername }) {
                     {[
                       { label: 'Users', value: stats.totals.userCount },
                       { label: 'Total Transactions', value: stats.totals.totalTx.toLocaleString() },
-                      { label: 'Total Trades', value: stats.totals.totalTrades.toLocaleString() },
+                      { label: 'Total Trades', value: (stats.totals.totalTrades ?? stats.totals.totalTx ?? 0).toLocaleString() },
                     ].map(({ label, value }) => (
                       <div key={label} className={`${isDark ? 'bg-gray-700' : 'bg-gray-50'} rounded-lg p-3`}>
                         <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} mb-1`}>{label}</p>
