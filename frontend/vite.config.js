@@ -1,29 +1,37 @@
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
+import os from 'os';
 
-export default defineConfig({
-  plugins: [react()],
-  server: {
-    host: true,
-    proxy: {
-      // Use the IPv4 address directly to stop the ::1 (IPv6) errors
-      '/api': {
-        target: 'http://127.0.0.1:3000',
-        changeOrigin: true,
-        secure: false,
-        // Keep rewrite ONLY if your backend routes DON'T start with /api
-        // Based on your terminal, they seem to expect /api/auth/login, etc.
-        // So let's try WITHOUT rewrite first.
-      },
-      // Catch paths that don't start with /api
-      '^/(feed|friends|profile|announcements|status|login|auth)': {
-        target: 'http://127.0.0.1:3000',
-        changeOrigin: true,
-        secure: false,
+function getLocalIP() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      if (iface.family === 'IPv4' && !iface.internal) return iface.address;
+    }
+  }
+  return '127.0.0.1';
+}
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  const apiTarget = env.VITE_API_URL || `http://localhost:3000`;
+
+  console.log(`[vite] API proxy target: ${apiTarget}`);
+
+  return {
+    plugins: [react()],
+    server: {
+      host: true,
+      proxy: {
+        '/api': {
+          target: apiTarget,
+          changeOrigin: true,
+          secure: false,
+        },
       },
     },
-  },
-  preview: {
-    historyApiFallback: true,
-  },
+    preview: {
+      historyApiFallback: true,
+    },
+  };
 });
