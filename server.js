@@ -4,6 +4,24 @@ const path = require('path');
 const https = require('https');
 const { supabase } = require('./supabase');
 
+// Simple in-memory rate limiter for auth routes
+const rateLimitMap = new Map();
+function rateLimit(maxRequests, windowMs) {
+  return (req, res, next) => {
+    const key = req.ip || req.connection.remoteAddress;
+    const now = Date.now();
+    const record = rateLimitMap.get(key) || { count: 0, resetAt: now + windowMs };
+    if (now > record.resetAt) { record.count = 0; record.resetAt = now + windowMs; }
+    record.count++;
+    rateLimitMap.set(key, record);
+    if (record.count > maxRequests) {
+      return res.status(429).json({ error: 'Too many attempts. Please wait a minute and try again.' });
+    }
+    next();
+  };
+}
+const authRateLimit = rateLimit(10, 60 * 1000); // 10 attempts per minute
+
 const app = express();
 app.use(express.json({ limit: '20mb' }));
 
@@ -28,15 +46,19 @@ async function requireUser(req, res, next) {
 }
 
 async function requireModerator(req, res, next) {
-  await requireUser(req, res, async () => {
-    if (req.role !== 'admin' && req.role !== 'moderator') return res.status(403).json({ error: 'Moderator access required' });
+  await requireUser(req, res, () => {
+    if (req.role !== 'admin' && req.role !== 'moderator') {
+      return res.status(403).json({ error: 'Moderator access required' });
+    }
     next();
   });
 }
 
 async function requireAdmin(req, res, next) {
-  await requireUser(req, res, async () => {
-    if (req.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
+  await requireUser(req, res, () => {
+    if (req.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
     next();
   });
 }
@@ -47,7 +69,7 @@ app.get('/api/auth/status', async (req, res) => {
   res.json({ hasUsers: (count || 0) > 0, allowRegistration: true });
 });
 
-app.post('/api/auth/register', async (req, res) => {
+app.post('/api/auth/register', authRateLimit, async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Username and password required.' });
   if (!/^[a-zA-Z0-9_]{3,20}$/.test(username.trim())) return res.status(400).json({ error: 'Username must be 3-20 characters, letters/numbers/underscore only.' });
@@ -67,7 +89,7 @@ app.post('/api/auth/register', async (req, res) => {
   res.json({ success: true, username: username.trim(), role, token: signInData.session.access_token, refreshToken: signInData.session.refresh_token });
 });
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', authRateLimit, async (req, res) => {
   const { username, password } = req.body;
   if (!username || !password) return res.status(400).json({ error: 'Username and password required.' });
   const email = `${username.trim().toLowerCase()}@statera.local`;
@@ -97,10 +119,10 @@ app.post('/api/auth/change-password', requireUser, async (req, res) => {
 });
 
 // ── Profile routes ──────────────────────────────────────────────────────────
-app.get('/api/users', async (req, res) => {
+app.get('/api/users', requireUser, async (req, res) => {
   const { data, error } = await supabase.from('profiles').select('username, role, bio, public_inventory, public_holdings, avatar_base64, created_at, steam_id');
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data.map(p => ({ username: p.username, role: p.role, bio: p.bio, publicInventory: p.public_inventory, publicHoldings: p.public_holdings, steamId: p.public_inventory ? p.steam_id : null, avatarBase64: p.avatar_base64, createdAt: p.created_at })));
+  res.json(data.map(p => ({ username: p.username, role: p.role, bio: p.bio, publicInventory: p.public_inventory, publicHoldings: p.public_holdings, steamId: p.public_inventory ? p.steam_id : null, avatarBase64: p.avatar_base64 || null, createdAt: p.created_at })));
 });
 
 app.get('/api/users/:username/profile', async (req, res) => {
@@ -328,7 +350,7 @@ app.get('/api/transactions/reconstruct', requireUser, async (req, res) => {
   for (const tx of normalised) {
     if (!holdings[tx.ticker]) holdings[tx.ticker] = { ticker:tx.ticker, isin:tx.isin||null, quantity:0, totalCost:0 };
     const h = holdings[tx.ticker];
-    if (isin && !h.isin) h.isin = tx.isin;
+    if (tx.isin && !h.isin) h.isin = tx.isin;
     if (tx.quantity > 0) { h.totalCost += tx.quantity*(tx.price||0); h.quantity += tx.quantity; }
     else { const avg = h.quantity>0 ? h.totalCost/h.quantity : 0; h.totalCost = Math.max(0, h.totalCost-Math.abs(tx.quantity)*avg); h.quantity -= Math.abs(tx.quantity); }
   }
@@ -524,6 +546,7 @@ app.get('/api/activity/mine', requireUser, async (req, res) => {
 app.post('/api/activity/screenshot', requireUser, async (req, res) => {
   const { skinName, caption, imageBase64 } = req.body;
   if (!imageBase64) return res.status(400).json({ error: 'imageBase64 required.' });
+  if (imageBase64.length > 1.5 * 1024 * 1024) return res.status(400).json({ error: 'Image too large. Maximum 1 MB.' });
   await appendActivity(req.user.id, 'skin_screenshot', { skinName:skinName||'Unknown skin', caption:caption||'', imageBase64 });
   res.json({ success:true });
 });
@@ -577,7 +600,7 @@ app.post('/api/cs/prices/sync', requireUser, async (req, res) => {
   } catch(e) { res.status(500).json({ error:e.message }); }
 });
 
-app.get('/api/cs/prices/search/:query', async (req, res) => {
+app.get('/api/cs/prices/search/:query', requireUser, async (req, res) => {
   const { data } = await supabase.from('cs_price_cache').select('skin_name, price_usd, price_sek').ilike('skin_name', `%${req.params.query}%`).limit(20);
   res.json(data||[]);
 });

@@ -75,6 +75,32 @@ export default function App() {
     });
   }, []);
 
+  // ── Token refresh ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (authStatus !== 'logged-in') return;
+    // Refresh token every 45 minutes (tokens expire after 60 min)
+    const interval = setInterval(async () => {
+      const refreshToken = sessionStorage.getItem('auth_refresh');
+      if (!refreshToken) return;
+      try {
+        const res = await fetch('/api/auth/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          sessionStorage.setItem('auth_token', data.token);
+          if (data.refreshToken) sessionStorage.setItem('auth_refresh', data.refreshToken);
+        } else {
+          // Refresh failed — log out
+          handleLogout();
+        }
+      } catch(e) {}
+    }, 45 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [authStatus]);
+
   // ── Theme ──────────────────────────────────────────────────────────────────
   useEffect(() => { localStorage.setItem('theme', isDark ? 'dark' : 'light'); }, [isDark]);
 
