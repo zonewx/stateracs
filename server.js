@@ -259,15 +259,19 @@ const ISIN_CURRENCY_MAP = {
 };
 
 function getEffectiveCurrency(currency, isin, broker) {
-  // Montrose stores settlement currency (SEK) in kursvaluta, not instrument currency
-  // So for Montrose, always derive from ISIN prefix
-  if (broker === 'montrose' && isin) {
-    const prefix = isin.substring(0, 2).toUpperCase();
-    return ISIN_CURRENCY_MAP[prefix] || 'SEK';
-  }
   // For Avanza/Nordnet, the currency column IS the instrument currency — trust it
-  if (currency && currency !== 'SEK' && currency !== '-') return currency;
-  // Fall back to ISIN inference
+  if (broker === 'avanza' || broker === 'nordnet') return currency || (isin ? ISIN_CURRENCY_MAP[isin.substring(0, 2)] : null) || 'USD';
+  
+  // For Montrose: kursvaluta is the trading currency
+  // Swedish stocks have SEK, US stocks have USD, etc.
+  // Only fall back to ISIN if currency is missing
+  if (broker === 'montrose') {
+    if (currency && currency !== 'SEK') return currency; // USD, EUR, etc. → use it
+    return 'SEK'; // Default to SEK for Swedish trading
+  }
+  
+  // Generic fallback
+  if (currency && currency !== '-') return currency;
   if (isin) {
     const prefix = isin.substring(0, 2).toUpperCase();
     if (ISIN_CURRENCY_MAP[prefix]) return ISIN_CURRENCY_MAP[prefix];
@@ -318,7 +322,7 @@ async function resolveSymbolWithContext(rawTicker, isin, name, currency, broker,
   if (overrideKey && overrides[overrideKey]) return overrides[overrideKey];
 
   // 2. Cache hit
-  const cacheKey = `${broker || ''}|${isin || rawTicker || name}`;
+  const cacheKey = `${broker || ''}|${currency || ''}|${isin || rawTicker || name}`;
   if (cache[cacheKey] !== undefined) return cache[cacheKey];
 
   const save = async (symbol) => {
@@ -331,27 +335,8 @@ async function resolveSymbolWithContext(rawTicker, isin, name, currency, broker,
 
   const effectiveCurrency = getEffectiveCurrency(currency, isin, broker);
   const isinPrefix = isin ? isin.substring(0, 2).toUpperCase() : null;
-  
-  // DUAL-LISTING INTELLIGENCE: Prefer exchange matching transaction currency over ISIN country
-  // Use RAW currency from CSV (not effectiveCurrency which gets transformed by getEffectiveCurrency)
-  // Example: Montrose CSV has SEK for AstraZeneca, but getEffectiveCurrency returns GBP from ISIN
-  const rawCurrency = (currency || 'SEK').toUpperCase();
-  const currencyMarketMismatch = (
-    (isinPrefix === 'GB' && rawCurrency === 'SEK') ||  // UK company trading in Sweden
-    (isinPrefix === 'GB' && rawCurrency === 'NOK') ||  // UK company trading in Norway
-    (isinPrefix === 'GB' && rawCurrency === 'DKK') ||  // UK company trading in Denmark
-    (isinPrefix === 'US' && rawCurrency === 'SEK') ||  // US company with Swedish listing
-    (isinPrefix === 'CA' && rawCurrency === 'SEK')     // Canadian company with Swedish listing
-  );
-  
-  if (currencyMarketMismatch) {
-    log.info('dual_listing_override', { isin, isinPrefix, rawCurrency, effectiveCurrency, rawTicker, name, broker });
-  }
-  
-  const preferUSListing = !currencyMarketMismatch && (effectiveCurrency === 'USD' || isinPrefix === 'US' || isinPrefix === 'CA');
-  // For dual-listing mismatches, use raw currency for suffix preference (e.g., SEK → .ST not GBP → .L)
-  const currencyForSuffix = currencyMarketMismatch ? rawCurrency : effectiveCurrency;
-  const preferredSuffixes = preferUSListing ? [] : (CURRENCY_SUFFIX_MAP[currencyForSuffix] || []);
+  const preferUSListing = effectiveCurrency === 'USD' || isinPrefix === 'US' || isinPrefix === 'CA';
+  const preferredSuffixes = preferUSListing ? [] : (CURRENCY_SUFFIX_MAP[effectiveCurrency] || []);
 
   const cleaned = cleanRawTicker(rawTicker);
   const firstWord = rawTicker ? rawTicker.trim().split(/\s+/)[0].toUpperCase().replace(/[^A-Z0-9]/g, '') : null;
@@ -396,9 +381,6 @@ async function resolveSymbolWithContext(rawTicker, isin, name, currency, broker,
           if (preferredSuffixes.some(s => q.symbol.endsWith(s))) score += 100;
           // +50 for US listings when appropriate
           if (preferUSListing && !q.symbol.includes('.')) score += 50;
-          // BOOST: +200 for currency market mismatch cases (dual-listing override)
-          // Example: GB ISIN + SEK currency + .ST symbol = strong match
-          if (currencyMarketMismatch && preferredSuffixes.some(s => q.symbol.endsWith(s))) score += 200;
           return { symbol: q.symbol, score };
         }).sort((a, b) => b.score - a.score);
         return save(scored[0].symbol);
@@ -578,6 +560,26 @@ app.post('/api/transactions/upload', requireUser, async (req, res) => {
 });
 
 app.post('/api/transactions/resolve', requireUser, async (req, res) => {
+  const { force } = req.body; // New: force re-resolve all tickers
+  
+  if (force) {
+    // Clear all ticker cache entries for this user
+    await supabase.from('ticker_cache').delete().eq('user_id', req.user.id);
+    // Get ALL transactions with tickers to re-resolve
+    const { data: allTxs } = await supabase.from('transactions').select('id, raw_ticker, isin, name, currency, broker, ticker').eq('user_id', req.user.id).in('type', ['buy','sell','other','withdrawal']);
+    let resolved = 0;
+    for (const tx of (allTxs||[])) {
+      const ticker = await resolveSymbol(tx.raw_ticker||null, tx.isin, tx.name, tx.currency, tx.broker, req.user.id);
+      if (ticker && ticker !== tx.ticker) { 
+        await supabase.from('transactions').update({ ticker }).eq('id', tx.id); 
+        resolved++; 
+      }
+      await new Promise(r => setTimeout(r, 150));
+    }
+    return res.json({ resolved, total:(allTxs||[]).length, forced: true });
+  }
+  
+  // Normal mode: only resolve unresolved transactions
   const { data: unresolved } = await supabase.from('transactions').select('id, raw_ticker, isin, name, currency, broker').eq('user_id', req.user.id).in('type', ['buy','sell']).or('ticker.is.null,ticker.eq.');
   await supabase.from('ticker_cache').delete().eq('user_id', req.user.id).is('ticker', null);
   let resolved = 0;
@@ -599,8 +601,22 @@ app.get('/api/transactions/reconstruct', requireUser, async (req, res) => {
   // Normalise: use ticker if resolved, else raw_ticker
   // Group by ISIN when available (avoids duplicate holdings from re-resolves)
   const normalised = (txs||[])
-    .map(t => ({ ...t, ticker: (t.ticker||t.raw_ticker||'').trim() }))
+    .map(t => ({ 
+      ...t, 
+      ticker: (t.ticker||t.raw_ticker||'').trim(),
+      // Handle old data with negative sell quantities - normalize to positive
+      quantity: Math.abs(t.quantity || 0)
+    }))
     .filter(t => t.ticker && t.quantity > 0); // skip zero-quantity rows
+  
+  // Sort same-day transactions: sells before buys (prevents incorrect quantity when buy+sell on same day)
+  normalised.sort((a, b) => {
+    if (a.date === b.date) {
+      const typeOrder = { sell: 1, withdrawal: 1, buy: 2, other: 3 };
+      return (typeOrder[a.type] || 99) - (typeOrder[b.type] || 99);
+    }
+    return 0; // Already sorted by date from query
+  });
 
   // Build ISIN → best ticker mapping (prefer .ST, .OL etc over plain ticker)
   const isinToTicker = {};
