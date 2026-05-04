@@ -331,7 +331,23 @@ async function resolveSymbolWithContext(rawTicker, isin, name, currency, broker,
 
   const effectiveCurrency = getEffectiveCurrency(currency, isin, broker);
   const isinPrefix = isin ? isin.substring(0, 2).toUpperCase() : null;
-  const preferUSListing = effectiveCurrency === 'USD' || isinPrefix === 'US' || isinPrefix === 'CA';
+  
+  // DUAL-LISTING INTELLIGENCE: Prefer exchange matching transaction currency over ISIN country
+  // Example: GB ISIN (London) but trading in SEK → prefer Stockholm .ST over London .L
+  // This handles cases like AstraZeneca where Montrose provides GB ISIN but user trades Stockholm listing
+  const currencyMarketMismatch = (
+    (isinPrefix === 'GB' && effectiveCurrency === 'SEK') ||  // UK company trading in Sweden
+    (isinPrefix === 'GB' && effectiveCurrency === 'NOK') ||  // UK company trading in Norway
+    (isinPrefix === 'GB' && effectiveCurrency === 'DKK') ||  // UK company trading in Denmark
+    (isinPrefix === 'US' && effectiveCurrency === 'SEK') ||  // US company with Swedish listing
+    (isinPrefix === 'CA' && effectiveCurrency === 'SEK')     // Canadian company with Swedish listing
+  );
+  
+  if (currencyMarketMismatch) {
+    log.info('dual_listing_override', { isin, isinPrefix, currency: effectiveCurrency, rawTicker, name });
+  }
+  
+  const preferUSListing = !currencyMarketMismatch && (effectiveCurrency === 'USD' || isinPrefix === 'US' || isinPrefix === 'CA');
   const preferredSuffixes = preferUSListing ? [] : (CURRENCY_SUFFIX_MAP[effectiveCurrency] || []);
 
   const cleaned = cleanRawTicker(rawTicker);
@@ -369,11 +385,17 @@ async function resolveSymbolWithContext(rawTicker, isin, name, currency, broker,
       const results = await yahooFinance.search(isin);
       const quotes = (results?.quotes || []).filter(q => q.symbol && q.quoteType !== 'OPTION' && q.quoteType !== 'FUTURE');
       if (quotes.length) {
-        // Score: prefer symbols matching preferred suffixes, then by exchange
+        // Score: heavily prefer symbols matching transaction currency's exchange
+        // This ensures dual-listed stocks resolve to the correct market
         const scored = quotes.map(q => {
           let score = 0;
+          // +100 for matching preferred suffix (e.g., .ST for SEK, .OL for NOK)
           if (preferredSuffixes.some(s => q.symbol.endsWith(s))) score += 100;
+          // +50 for US listings when appropriate
           if (preferUSListing && !q.symbol.includes('.')) score += 50;
+          // BOOST: +200 for currency market mismatch cases (dual-listing override)
+          // Example: GB ISIN + SEK currency + .ST symbol = strong match
+          if (currencyMarketMismatch && preferredSuffixes.some(s => q.symbol.endsWith(s))) score += 200;
           return { symbol: q.symbol, score };
         }).sort((a, b) => b.score - a.score);
         return save(scored[0].symbol);
@@ -539,7 +561,7 @@ app.post('/api/transactions/upload', requireUser, async (req, res) => {
   const existingIds = new Set((existing||[]).map(dedupKey));
   const newUnique = allNew.filter(t => !existingIds.has(dedupKey(t)));
   for (const tx of newUnique) {
-    if ((tx.type==='buy'||tx.type==='sell') && !tx.ticker && (tx.rawTicker||tx.isin)) {
+    if ((tx.type==='buy'||tx.type==='sell'||tx.type==='other'||tx.type==='withdrawal') && !tx.ticker && (tx.rawTicker||tx.isin)) {
       tx.ticker = await resolveSymbol(tx.rawTicker||null, tx.isin, tx.name, tx.currency, tx.broker, req.user.id) || '';
       await new Promise(r => setTimeout(r, 150));
     }
@@ -568,7 +590,7 @@ app.get('/api/transactions/reconstruct', requireUser, async (req, res) => {
   const { data: txs } = await supabase.from('transactions')
     .select('ticker, raw_ticker, quantity, price, isin, type, date, name')
     .eq('user_id', req.user.id)
-    .in('type', ['buy', 'sell'])
+    .in('type', ['buy', 'sell', 'other', 'withdrawal'])
     .order('date', { ascending: true });
 
   // Normalise: use ticker if resolved, else raw_ticker
@@ -607,6 +629,15 @@ app.get('/api/transactions/reconstruct', requireUser, async (req, res) => {
       h.quantity -= tx.quantity;
       // Clamp to zero if we sold more than we have (pre-history sells)
       if (h.quantity < 0) { h.quantity = 0; h.totalCost = 0; }
+    } else if ((tx.type === 'other' || tx.type === 'withdrawal') && tx.isin && tx.price === 0) {
+      // Split adjustments: Övrigt/Uttag with ISIN and zero price
+      // Övrigt (other) = add shares, Uttag (withdrawal) = remove shares
+      // Zero price means we don't adjust cost basis (split doesn't change total value)
+      if (tx.type === 'withdrawal') {
+        h.quantity -= tx.quantity;
+      } else {
+        h.quantity += tx.quantity;
+      }
     }
   }
 
