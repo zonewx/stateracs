@@ -333,22 +333,25 @@ async function resolveSymbolWithContext(rawTicker, isin, name, currency, broker,
   const isinPrefix = isin ? isin.substring(0, 2).toUpperCase() : null;
   
   // DUAL-LISTING INTELLIGENCE: Prefer exchange matching transaction currency over ISIN country
-  // Example: GB ISIN (London) but trading in SEK → prefer Stockholm .ST over London .L
-  // This handles cases like AstraZeneca where Montrose provides GB ISIN but user trades Stockholm listing
+  // Use RAW currency from CSV (not effectiveCurrency which gets transformed by getEffectiveCurrency)
+  // Example: Montrose CSV has SEK for AstraZeneca, but getEffectiveCurrency returns GBP from ISIN
+  const rawCurrency = (currency || 'SEK').toUpperCase();
   const currencyMarketMismatch = (
-    (isinPrefix === 'GB' && effectiveCurrency === 'SEK') ||  // UK company trading in Sweden
-    (isinPrefix === 'GB' && effectiveCurrency === 'NOK') ||  // UK company trading in Norway
-    (isinPrefix === 'GB' && effectiveCurrency === 'DKK') ||  // UK company trading in Denmark
-    (isinPrefix === 'US' && effectiveCurrency === 'SEK') ||  // US company with Swedish listing
-    (isinPrefix === 'CA' && effectiveCurrency === 'SEK')     // Canadian company with Swedish listing
+    (isinPrefix === 'GB' && rawCurrency === 'SEK') ||  // UK company trading in Sweden
+    (isinPrefix === 'GB' && rawCurrency === 'NOK') ||  // UK company trading in Norway
+    (isinPrefix === 'GB' && rawCurrency === 'DKK') ||  // UK company trading in Denmark
+    (isinPrefix === 'US' && rawCurrency === 'SEK') ||  // US company with Swedish listing
+    (isinPrefix === 'CA' && rawCurrency === 'SEK')     // Canadian company with Swedish listing
   );
   
   if (currencyMarketMismatch) {
-    log.info('dual_listing_override', { isin, isinPrefix, currency: effectiveCurrency, rawTicker, name });
+    log.info('dual_listing_override', { isin, isinPrefix, rawCurrency, effectiveCurrency, rawTicker, name, broker });
   }
   
   const preferUSListing = !currencyMarketMismatch && (effectiveCurrency === 'USD' || isinPrefix === 'US' || isinPrefix === 'CA');
-  const preferredSuffixes = preferUSListing ? [] : (CURRENCY_SUFFIX_MAP[effectiveCurrency] || []);
+  // For dual-listing mismatches, use raw currency for suffix preference (e.g., SEK → .ST not GBP → .L)
+  const currencyForSuffix = currencyMarketMismatch ? rawCurrency : effectiveCurrency;
+  const preferredSuffixes = preferUSListing ? [] : (CURRENCY_SUFFIX_MAP[currencyForSuffix] || []);
 
   const cleaned = cleanRawTicker(rawTicker);
   const firstWord = rawTicker ? rawTicker.trim().split(/\s+/)[0].toUpperCase().replace(/[^A-Z0-9]/g, '') : null;
