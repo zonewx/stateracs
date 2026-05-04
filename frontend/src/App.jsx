@@ -275,14 +275,36 @@ export default function App() {
 
   const handleUpload = async (files) => {
     if (!files.length) return;
-    setUploadLoading(true); setUploadStatus(null); setSyncStatus('');
+    setUploadLoading(true); setUploadStatus(null); setSyncStatus(''); setUploadProgress(null);
+    
+    // Simulated progress updates for better UX
+    const updateProgress = (phase, pct, label) => setUploadProgress({ phase, pct, label });
+    
     try {
+      updateProgress('parsing', 10, 'Reading CSV files...');
       const payloads = await Promise.all(Array.from(files).map(readFile));
+      
+      updateProgress('uploading', 30, 'Detecting broker format...');
+      await new Promise(r => setTimeout(r, 300)); // Brief pause for visual feedback
+      
+      updateProgress('processing', 50, 'Processing transactions...');
       const res = await apiFetch('/api/transactions/upload', { method: 'POST', body: JSON.stringify({ files: payloads }) });
       const data = await res.json();
+      
+      updateProgress('resolving', 70, 'Resolving tickers...');
+      await new Promise(r => setTimeout(r, 200));
+      
       setUploadStatus({ results: data.results, newAdded: data.newAdded ?? 0, total: data.total ?? 0 });
+      
+      updateProgress('syncing', 85, 'Building portfolio...');
       await handleSyncPortfolio();
-    } catch { setUploadStatus({ error: 'Upload failed.' }); }
+      
+      updateProgress('done', 100, `✓ Imported ${data.newAdded ?? 0} transactions`);
+      setTimeout(() => setUploadProgress(null), 3000); // Clear after 3s
+    } catch { 
+      setUploadStatus({ error: 'Upload failed.' }); 
+      setUploadProgress(null);
+    }
     setUploadLoading(false);
   };
 
