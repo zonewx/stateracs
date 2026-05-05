@@ -619,8 +619,16 @@ app.get('/api/transactions/reconstruct', requireUser, async (req, res) => {
     }))
     .filter(t => t.ticker && t.quantity > 0); // skip zero-quantity rows
   
-  // CSV is already in chronological order - don't re-sort same-day transactions
-  // (previously sorted sells before buys, but this breaks intraday trades)
+  // Sort same-day transactions: BUYS before SELLS
+  // Montrose CSV exports same-day transactions in reverse chronological order
+  // Example: April 8 in CSV shows Sell then Buy, but actual order was Buy then Sell
+  normalised.sort((a, b) => {
+    if (a.date === b.date) {
+      const typeOrder = { buy: 1, other: 2, withdrawal: 3, sell: 4 };
+      return (typeOrder[a.type] || 99) - (typeOrder[b.type] || 99);
+    }
+    return 0; // Already sorted by date from query
+  });
 
   // Build ISIN → best ticker mapping (prefer .ST, .OL etc over plain ticker)
   const isinToTicker = {};
