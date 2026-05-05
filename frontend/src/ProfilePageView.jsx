@@ -30,9 +30,12 @@ export default function ProfilePageView({ isDark, authUsername, viewUsername = n
 
   useEffect(() => {
     fetchProfile();
+  }, [targetUser]);
+
+  useEffect(() => {
     if (profile?.publicInventory) loadPublicInventory();
     if (profile?.publicHoldings) loadPublicHoldings();
-  }, [targetUser]);
+  }, [profile]);
 
   async function fetchProfile() {
     try {
