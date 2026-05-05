@@ -22,7 +22,7 @@ const Toggle = ({ value, onChange }) => (
 export default function ProfileEditPage({ isDark, authUsername }) {
   const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
-  const [editForm, setEditForm] = useState({ bio: '', steamId: '', publicInventory: false, publicHoldings: false, avatarBase64: null });
+  const [editForm, setEditForm] = useState({ bio: '', steamId: '', publicInventory: false, publicHoldings: false, showPortfolioValue: false, avatarBase64: null });
   const [steamVerified, setSteamVerified] = useState(false);
   const [steamLookupError, setSteamLookupError] = useState('');
   const [steamLookupLoading, setSteamLookupLoading] = useState(false);
@@ -56,7 +56,7 @@ export default function ProfileEditPage({ isDark, authUsername }) {
       const res = await fetch(`/api/users/${authUsername}/profile`, { headers: h });
       const data = await res.json();
       setProfile(data);
-      setEditForm({ bio: data.bio || '', steamId: data.steamId || '', publicInventory: data.publicInventory || false, publicHoldings: data.publicHoldings || false, avatarBase64: data.avatarBase64 || null });
+      setEditForm({ bio: data.bio || '', steamId: data.steamId || '', publicInventory: data.publicInventory || false, publicHoldings: data.publicHoldings || false, showPortfolioValue: data.showPortfolioValue || false, avatarBase64: data.avatarBase64 || null });
       setSteamVerified(data.steamVerified || false);
     } catch(e) {}
   }
@@ -178,6 +178,7 @@ export default function ProfileEditPage({ isDark, authUsername }) {
                 {[
                   { key: 'publicInventory', title: 'Public CS Inventory', desc: 'Show Steam CS inventory on profile' },
                   { key: 'publicHoldings', title: 'Public Portfolio', desc: 'Show stock holdings on profile' },
+                  { key: 'showPortfolioValue', title: 'Show Portfolio Value', desc: 'Display currency values of holdings' },
                 ].map(({ key, title, desc }) => (
                   <div key={key} className={`flex items-center justify-between gap-3 p-3 rounded-xl ${isDark ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
                     <div className="flex-1 min-w-0">

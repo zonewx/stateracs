@@ -23,6 +23,7 @@ export default function ProfilePageView({ isDark, authUsername, viewUsername = n
   const [loadingInventory, setLoadingInventory] = useState(false);
   const [loadingHoldings, setLoadingHoldings] = useState(false);
   const [inventoryError, setInventoryError] = useState('');
+  const [showAllHoldings, setShowAllHoldings] = useState(false);
 
   const h = { 'Content-Type': 'application/json', ...(sessionStorage.getItem('auth_token') ? { 'Authorization': `Bearer ${sessionStorage.getItem('auth_token')}` } : {}) };
   const card = `${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-xl`;
@@ -152,20 +153,52 @@ export default function ProfilePageView({ isDark, authUsername, viewUsername = n
 
             {/* Stock holdings */}
             <div className={`${card} p-5`}>
-              <h3 className={`text-xs font-bold uppercase tracking-wider mb-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Portfolio</h3>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className={`text-xs font-bold uppercase tracking-wider ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Portfolio</h3>
+                {profile.publicHoldings && viewingHoldings?.length > 0 && (
+                  <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{viewingHoldings.length} holdings</span>
+                )}
+              </div>
               {!profile.publicHoldings ? (
                 <p className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>🔒 Private</p>
               ) : loadingHoldings ? (
                 <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"/>
               ) : viewingHoldings?.length > 0 ? (
-                <div className="flex flex-wrap gap-2">
-                  {viewingHoldings.map(h => (
-                    <div key={h.ticker} className={`${isDark ? 'bg-gray-700' : 'bg-gray-100'} rounded-lg px-3 py-1.5`}>
-                      <span className="text-sm font-bold">{h.ticker}</span>
-                      <span className={`ml-1.5 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{h.quantity} shares</span>
-                    </div>
-                  ))}
-                </div>
+                <>
+                  <div className="flex flex-col gap-2">
+                    {viewingHoldings.slice(0, showAllHoldings ? undefined : 10).map((h, i) => {
+                      const initial = h.ticker?.[0] || '?';
+                      return (
+                        <div key={h.ticker} className={`flex items-center gap-3 p-3 rounded-lg ${isDark ? 'bg-gray-700/50 hover:bg-gray-700' : 'bg-gray-50 hover:bg-gray-100'} transition`}>
+                          {/* Icon/Logo placeholder */}
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shrink-0 ${isDark ? 'bg-gray-600 text-gray-300' : 'bg-gray-200 text-gray-700'}`}>
+                            {initial}
+                          </div>
+                          {/* Name & Ticker */}
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-sm truncate">{h.name || h.ticker}</p>
+                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{h.ticker}</p>
+                          </div>
+                          {/* Weight & Value */}
+                          <div className="text-right">
+                            <p className="font-bold text-sm">{h.weight?.toFixed(2) || '0.00'}%</p>
+                            {profile.showPortfolioValue && h.value && (
+                              <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{h.value.toLocaleString('sv-SE', { maximumFractionDigits: 0 })} kr</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {viewingHoldings.length > 10 && (
+                    <button
+                      onClick={() => setShowAllHoldings(!showAllHoldings)}
+                      className={`w-full mt-3 py-2 rounded-lg text-sm font-medium transition ${isDark ? 'bg-gray-700 hover:bg-gray-600 text-gray-300' : 'bg-gray-100 hover:bg-gray-200 text-gray-700'}`}
+                    >
+                      {showAllHoldings ? 'Show Less' : `View All (${viewingHoldings.length})`}
+                    </button>
+                  )}
+                </>
               ) : (
                 <p className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>No public holdings</p>
               )}

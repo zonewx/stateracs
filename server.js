@@ -157,37 +157,68 @@ app.get('/api/users', requireUser, async (req, res) => {
 app.get('/api/users/:username/profile', async (req, res) => {
   const { data, error } = await supabase.from('profiles').select('*').eq('username', req.params.username).single();
   if (error || !data) return res.status(404).json({ error: 'User not found' });
-  res.json({ username: data.username, role: data.role, bio: data.bio, publicInventory: data.public_inventory, publicHoldings: data.public_holdings, steamId: data.steam_id || null, steamVerified: data.steam_verified || false, avatarBase64: data.avatar_base64, createdAt: data.created_at });
+  res.json({ username: data.username, role: data.role, bio: data.bio, publicInventory: data.public_inventory, publicHoldings: data.public_holdings, showPortfolioValue: data.show_portfolio_value, steamId: data.steam_id || null, steamVerified: data.steam_verified || false, avatarBase64: data.avatar_base64, createdAt: data.created_at });
 });
 
 app.put('/api/users/:username/profile', requireUser, async (req, res) => {
   if (req.username !== req.params.username) return res.status(403).json({ error: "Cannot edit another user's profile." });
-  const { bio, steamId, publicInventory, publicHoldings, avatarBase64 } = req.body;
+  const { bio, steamId, publicInventory, publicHoldings, showPortfolioValue, avatarBase64 } = req.body;
   const update = {};
   if (bio !== undefined) update.bio = bio;
   if (steamId !== undefined) { update.steam_id = steamId; if (steamId !== (await supabase.from('profiles').select('steam_id').eq('id', req.user.id).single()).data?.steam_id) update.steam_verified = false; }
   if (publicInventory !== undefined) update.public_inventory = publicInventory;
   if (publicHoldings !== undefined) update.public_holdings = publicHoldings;
+  if (showPortfolioValue !== undefined) update.show_portfolio_value = showPortfolioValue;
   if (avatarBase64 !== undefined) update.avatar_base64 = avatarBase64;
   const { data, error } = await supabase.from('profiles').update(update).eq('id', req.user.id).select().single();
   if (error) return res.status(500).json({ error: error.message });
-  res.json({ success: true, profile: { username: data.username, bio: data.bio, steamId: data.steam_id, publicInventory: data.public_inventory, publicHoldings: data.public_holdings, avatarBase64: data.avatar_base64 } });
+  res.json({ success: true, profile: { username: data.username, bio: data.bio, steamId: data.steam_id, publicInventory: data.public_inventory, publicHoldings: data.public_holdings, showPortfolioValue: data.show_portfolio_value, avatarBase64: data.avatar_base64 } });
 });
 
 app.get('/api/users/:username/holdings', async (req, res) => {
   const { data: profile } = await supabase.from('profiles').select('id, public_holdings').eq('username', req.params.username).single();
   if (!profile) return res.status(404).json({ error: 'User not found' });
   if (!profile.public_holdings) return res.status(403).json({ error: "This user's holdings are private." });
-  const { data: txs } = await supabase.from('transactions').select('ticker, raw_ticker, quantity, price, type').eq('user_id', profile.id).in('type', ['buy', 'sell']);
-  const trades = (txs || []).map(t => ({ ...t, ticker: (t.ticker || t.raw_ticker || '').trim() })).filter(t => t.ticker);
+  const { data: txs } = await supabase.from('transactions').select('ticker, raw_ticker, quantity, price, type, name, currency').eq('user_id', profile.id).in('type', ['buy', 'sell', 'other', 'withdrawal']);
+  const trades = (txs || []).map(t => ({ ...t, ticker: (t.ticker || t.raw_ticker || '').trim(), quantity: Math.abs(t.quantity || 0) })).filter(t => t.ticker && t.quantity > 0);
+  
   const holdings = {};
   for (const tx of trades) {
-    if (!holdings[tx.ticker]) holdings[tx.ticker] = { ticker: tx.ticker, quantity: 0, totalCost: 0 };
+    if (!holdings[tx.ticker]) holdings[tx.ticker] = { ticker: tx.ticker, name: tx.name, currency: tx.currency, quantity: 0, totalCost: 0 };
     const h = holdings[tx.ticker];
-    if (tx.quantity > 0) { h.totalCost += tx.quantity * (tx.price || 0); h.quantity += tx.quantity; }
-    else { const avg = h.quantity > 0 ? h.totalCost / h.quantity : 0; h.totalCost = Math.max(0, h.totalCost - Math.abs(tx.quantity) * avg); h.quantity -= Math.abs(tx.quantity); }
+    if (tx.type === 'buy') { h.totalCost += tx.quantity * (tx.price || 0); h.quantity += tx.quantity; }
+    else if (tx.type === 'sell') { const avg = h.quantity > 0 ? h.totalCost / h.quantity : 0; h.totalCost = Math.max(0, h.totalCost - tx.quantity * avg); h.quantity -= tx.quantity; }
+    else if ((tx.type === 'other' || tx.type === 'withdrawal') && tx.price === 0) { h.quantity += (tx.type === 'other' ? tx.quantity : -tx.quantity); }
   }
-  res.json(Object.values(holdings).filter(h => h.quantity > 0.001).map(h => ({ ticker: h.ticker, quantity: parseFloat(h.quantity.toFixed(4)) })));
+  
+  const validHoldings = Object.values(holdings).filter(h => h.quantity > 0.001).map(h => ({ ...h, quantity: Math.floor(h.quantity) }));
+  
+  // Fetch current prices for all holdings
+  const tickers = validHoldings.map(h => h.ticker);
+  let pricesMap = {};
+  try {
+    const yahooFinance = await import('yahoo-finance2').then(m => m.default);
+    const quotes = await yahooFinance.quote(tickers);
+    const quotesArray = Array.isArray(quotes) ? quotes : [quotes];
+    quotesArray.forEach(q => { if (q && q.symbol && q.regularMarketPrice) pricesMap[q.symbol] = q.regularMarketPrice; });
+  } catch(e) { console.error('Failed to fetch prices:', e); }
+  
+  // Calculate values and weights
+  let totalValue = 0;
+  validHoldings.forEach(h => {
+    const price = pricesMap[h.ticker] || 0;
+    h.value = price > 0 ? Math.round(price * h.quantity) : null;
+    if (h.value) totalValue += h.value;
+  });
+  
+  validHoldings.forEach(h => {
+    h.weight = totalValue > 0 && h.value ? (h.value / totalValue) * 100 : 0;
+  });
+  
+  // Sort by weight descending
+  validHoldings.sort((a, b) => b.weight - a.weight);
+  
+  res.json({ holdings: validHoldings });
 });
 
 app.get('/api/users/:username/inventory', async (req, res) => {
