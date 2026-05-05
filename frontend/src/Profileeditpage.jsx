@@ -9,7 +9,7 @@ const ROLE_BADGE = {
 function AvatarDisplay({ src, username, size = 'w-24 h-24', textSize = 'text-4xl' }) {
   if (src) return <img src={src} alt={username} className={`${size} rounded-full object-cover border-4 border-gray-700`} />;
   const initial = username?.[0]?.toUpperCase() || '?';
-  return <div className={`${size} rounded-full bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center ${textSize} font-bold text-white border-4 border-gray-700`}>{initial}</div>;
+  return <div className={`${size} rounded-full bg-linear-to-br from-blue-600 to-blue-800 flex items-center justify-center ${textSize} font-bold text-white border-4 border-gray-700`}>{initial}</div>;
 }
 
 const Toggle = ({ value, onChange }) => (
