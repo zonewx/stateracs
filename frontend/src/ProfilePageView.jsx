@@ -43,7 +43,7 @@ function getExchangeFlag(ticker) {
 function FlagIcon({ ticker, size = 'w-10 h-10' }) {
   const flag = getExchangeFlag(ticker);
   return (
-    <div className={`${size} rounded-full flex items-center justify-center text-2xl shrink-0 bg-gray-700 border-2 border-gray-600`}>
+    <div className={`${size} flex items-center justify-center shrink-0`} style={{ fontSize: '2.5rem' }}>
       {flag}
     </div>
   );
