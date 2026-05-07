@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const ROLE_BADGE = {
-  admin: { label: '🛡️ Admin', cls: 'bg-red-900/40 text-red-400 border border-red-800' },
-  moderator: { label: '🛡 Moderator', cls: 'bg-blue-900/40 text-blue-400 border border-blue-800' },
+  admin: { label: 'Admin', cls: 'bg-red-900/40 text-red-400 border border-red-800' },
+  moderator: { label: 'Moderator', cls: 'bg-blue-900/40 text-blue-400 border border-blue-800' },
 };
 
 function AvatarDisplay({ src, username, size = 'w-24 h-24', textSize = 'text-4xl' }) {
@@ -308,25 +308,25 @@ export default function ProfilePageView({ isDark, authUsername, viewUsername = n
 
         {/* Item Showcase Section */}
         {showcaseItems && showcaseItems.length > 0 && (
-          <div className={`${card} p-3 mb-2`}>
-            <div className="flex items-center justify-between mb-2">
-              <h3 className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+          <div className={`${card} p-2 mb-2`}>
+            <div className="flex items-center justify-between mb-1.5">
+              <h3 className={`text-[10px] font-semibold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                 Item Showcase
               </h3>
-              <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+              <span className={`text-[10px] ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                 {showcaseItems.length} {showcaseItems.length === 1 ? 'item' : 'items'}
               </span>
             </div>
             
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2">
+            <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-1.5">
               {showcaseItems.map(item => (
-                <div key={item.assetId} className={`${isDark ? 'bg-gray-700/50 hover:bg-gray-700' : 'bg-gray-50 hover:bg-gray-100'} rounded p-1.5 transition cursor-pointer border ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
+                <div key={item.assetId} className={`${isDark ? 'bg-gray-700/50 hover:bg-gray-700' : 'bg-gray-50 hover:bg-gray-100'} rounded p-1 transition cursor-pointer border ${isDark ? 'border-gray-600' : 'border-gray-200'}`}>
                   <img 
                     src={item.iconUrl} 
                     alt={item.name}
-                    className="w-full aspect-square object-contain mb-1"
+                    className="w-full aspect-square object-contain mb-0.5"
                   />
-                  <p className="text-[10px] text-center truncate">{item.name}</p>
+                  <p className="text-[9px] text-center truncate">{item.name}</p>
                 </div>
               ))}
             </div>
@@ -335,13 +335,13 @@ export default function ProfilePageView({ isDark, authUsername, viewUsername = n
 
         {/* Portfolio Section */}
         {profile.publicHoldings && (
-          <div className={`${card} p-3`}>
-            <div className="flex items-center justify-between mb-2">
-              <h3 className={`text-xs font-semibold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+          <div className={`${card} p-2.5`}>
+            <div className="flex items-center justify-between mb-1.5">
+              <h3 className={`text-[10px] font-semibold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                 Portfolio
               </h3>
               {viewingHoldings && (
-                <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
+                <span className={`text-[10px] ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
                   {viewingHoldings.length} holdings
                 </span>
               )}
@@ -371,19 +371,19 @@ export default function ProfilePageView({ isDark, authUsername, viewUsername = n
                     const relativeWidth = maxWeight > 0 ? ((h.weight || 0) / maxWeight) * 100 : 0;
                     
                     return (
-                      <div key={h.ticker} className={`flex flex-col gap-1.5 p-3 rounded-lg ${isDark ? 'bg-gray-700/50 hover:bg-gray-700' : 'bg-gray-50 hover:bg-gray-100'} transition`}>
-                        <div className="flex items-center gap-3">
-                          <FlagIcon ticker={h.ticker} />
+                      <div key={h.ticker} className={`flex flex-col gap-1 p-2 rounded ${isDark ? 'bg-gray-700/50 hover:bg-gray-700' : 'bg-gray-50 hover:bg-gray-100'} transition`}>
+                        <div className="flex items-center gap-2">
+                          <FlagIcon ticker={h.ticker} size="w-6 h-4.5" />
                           {/* Name & Ticker */}
                           <div className="flex-1 min-w-0">
-                            <p className="font-semibold text-sm truncate">{cleanCompanyName}</p>
-                            <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{h.ticker}</p>
+                            <p className="font-semibold text-xs truncate">{cleanCompanyName}</p>
+                            <p className={`text-[10px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{h.ticker}</p>
                           </div>
                           {/* Weight & Value */}
                           <div className="text-right">
-                            <p className="font-bold text-sm">{h.weight?.toFixed(2) || '0.00'}%</p>
+                            <p className="font-bold text-xs">{h.weight?.toFixed(2) || '0.00'}%</p>
                             {profile.showPortfolioValue && h.value && (
-                              <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{h.value.toLocaleString('sv-SE', { maximumFractionDigits: 0 })} kr</p>
+                              <p className={`text-[10px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{h.value.toLocaleString('sv-SE', { maximumFractionDigits: 0 })} kr</p>
                             )}
                           </div>
                         </div>
