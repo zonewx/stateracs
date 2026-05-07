@@ -8,6 +8,7 @@ import GlobalBar from './GlobalBar';
 import AdminPanel from './AdminPanel';
 import ModeratorPanel from './ModeratorPanel';
 import SocialFeed from './SocialFeed';
+import Sidebar from './Sidebar';
 
 export default function App() {
   const navigate = useNavigate();
@@ -515,8 +516,7 @@ export default function App() {
   const GB = () => <GlobalBar isDark={isDark} authUsername={authUsername} onNavigate={handleNavigate} onLogout={handleLogout} userRole={userRole} searchInputRef={globalSearchRef}/>;
 
   const PageShell = ({ children, title }) => (
-    <div className={`flex flex-col h-screen pt-12 ${isDark?'bg-gray-900 text-white':'bg-gray-100 text-gray-900'}`}>
-      <GB/>
+    <div className={`flex flex-col h-screen ${isDark?'bg-gray-900 text-white':'bg-gray-100 text-gray-900'}`}>
       {title&&<div className={`px-8 py-3 border-b shrink-0 ${isDark?'border-gray-800 bg-gray-900':'border-gray-200 bg-white'}`}><h1 className="text-base font-bold">{title}</h1></div>}
       {children}
     </div>
@@ -526,67 +526,6 @@ export default function App() {
     const { username } = useParams();
     const viewUser = username ? username.replace('@','') : null;
     return <PageShell><ProfilePageView isDark={isDark} authUsername={authUsername} viewUsername={viewUser}/></PageShell>;
-  };
-
-  const HomeScreen = () => {
-    const apps = [
-      { id: 'statera', name: 'Portfolio', desc: 'Portfolio tracker & analytics', color: 'from-blue-600 to-blue-800', icon: <svg width="44" height="44" viewBox="0 0 28 28" fill="none"><rect width="28" height="28" rx="6" fill="#1d4ed8"/><path d="M6 18l4-5 4 3 4-6" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>, stats: [{ label: 'Holdings', value: portfolio.length || '—' },{ label: 'Transactions', value: txCount.total || '—' },{ label: 'Dividends YTD', value: dividends?.totalThisYear > 0 ? `${Math.round(dividends.totalThisYear)} kr` : '—' }] },
-      { id: 'skins', name: 'CS Skins', desc: 'Track CS inventory, P&L & Steam value', color: 'from-orange-500 to-orange-700', icon: <div className="w-11 h-11 rounded-lg bg-white/20 flex items-center justify-center text-white font-bold text-xl">CS</div>, stats: [] },
-      { id: 'social', name: 'Social', desc: 'Feed, friends & skin screenshots', color: 'from-purple-600 to-purple-800', icon: <div className="w-11 h-11 rounded-lg bg-white/20 flex items-center justify-center text-white font-bold text-2xl">👥</div>, stats: [] },
-      ...(authUsername === 'admin' ? [{ id: 'admin', name: 'Admin Panel', desc: 'Manage users, system & announcements', color: 'from-red-700 to-red-900', icon: <div className="w-11 h-11 rounded-lg bg-white/20 flex items-center justify-center text-white font-bold text-2xl">🛡️</div>, stats: [] }] : []),
-      ...(userRole === 'moderator' ? [{ id: 'moderator', name: 'Mod Panel', desc: 'Manage users & announcements', color: 'from-blue-700 to-blue-900', icon: <div className="w-11 h-11 rounded-lg bg-white/20 flex items-center justify-center text-white font-bold text-2xl">🛡</div>, stats: [] }] : []),
-    ];
-
-    return (
-      <div className={`min-h-screen pt-12 ${isDark ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-900'}`}>
-        <GB />
-        <div className="max-w-4xl mx-auto px-8 py-16">
-          {announcements.length > 0 && (
-            <div className="flex flex-col gap-2 mb-6">
-              {announcements.map(a => {
-                const colors = { info: 'bg-blue-900/40 text-blue-300 border-blue-800', warning: 'bg-yellow-900/40 text-yellow-300 border-yellow-800', success: 'bg-green-900/40 text-green-300 border-green-800', error: 'bg-red-900/40 text-red-300 border-red-800' };
-                return (
-                  <div key={a.id} className={`flex items-start gap-3 px-4 py-3 rounded-xl border text-sm ${colors[a.type] || colors.info}`}>
-                    <span className="shrink-0">{a.type === 'warning' ? '⚠️' : a.type === 'error' ? '🚨' : a.type === 'success' ? '✅' : 'ℹ️'}</span>
-                    <div><span className="font-semibold">{a.title}</span>{a.message && <span className="ml-2 opacity-80">{a.message}</span>}</div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-          <div className="mb-12">
-            <h1 className="text-3xl font-bold mb-2">{authUsername}</h1>
-            <p className={`text-base ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Choose an app to open.</p>
-          </div>
-          <div className={`grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3`}>
-            {apps.map(app => (
-              <button key={app.id} onClick={() => { const map={statera:'/portfolio',skins:'/skins',social:'/social',admin:'/admin',moderator:'/moderator'}; navigate(map[app.id]||'/'); }} className={`text-left rounded-2xl overflow-hidden border transition-all duration-200 group hover:shadow-lg hover:-translate-y-0.5 cursor-pointer ${isDark ? 'bg-gray-800 border-gray-700 hover:border-gray-500' : 'bg-white border-gray-200 hover:border-gray-400'}`}>
-                <div className={`bg-linear-to-br ${app.color} p-6 flex items-start justify-between`}>
-                  <div>{app.icon}</div>
-                </div>
-                <div className="p-5">
-                  <h2 className="text-lg font-bold mb-1">{app.name}</h2>
-                  <p className={`text-sm mb-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{app.desc}</p>
-                  {app.stats.length > 0 && (
-                    <div className={`grid grid-cols-3 gap-3 pt-4 border-t ${isDark ? 'border-gray-700' : 'border-gray-100'}`}>
-                      {app.stats.map(s => (
-                        <div key={s.label}>
-                          <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} mb-0.5`}>{s.label}</p>
-                          <p className="text-sm font-bold">{s.value}</p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <div className={`mt-4 flex items-center gap-1 text-sm font-semibold ${isDark ? 'text-blue-400' : 'text-blue-600'}`}>
-                    Open <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="transition-transform group-hover:translate-x-0.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-                  </div>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
   };
 
   const PortfolioView = () => {
@@ -942,17 +881,33 @@ export default function App() {
 
   // ── Main App Return with Routes ─────────────────────────────────────────────
   return (
-    <Routes>
-      <Route path="/" element={<HomeScreen/>}/>
-      <Route path="/portfolio" element={<PortfolioView/>}/>
-      <Route path="/skins" element={<PageShell><CSSkins isDark={isDark} onBack={()=>navigate('/')} authUsername={authUsername}/></PageShell>}/>
-      <Route path="/social" element={<PageShell><SocialFeed isDark={isDark} authUsername={authUsername} onViewProfile={u=>navigate(`/profile/@${u}`)}/></PageShell>}/>
-      <Route path="/profile/edit" element={<PageShell><ProfileEditPage isDark={isDark} authUsername={authUsername}/></PageShell>}/>
-      <Route path="/profile" element={<ProfileRoute/>}/>
-      <Route path="/profile/:username" element={<ProfileRoute/>}/>
-      <Route path="/admin" element={<PageShell title="🛡️ Admin Panel"><AdminPanel isDark={isDark} authUsername={authUsername}/></PageShell>}/>
-      <Route path="/moderator" element={<PageShell title="🛡 Moderator Panel"><ModeratorPanel isDark={isDark} authUsername={authUsername} userRole={userRole}/></PageShell>}/>
-      <Route path="*" element={<Navigate to="/" replace/>}/>
-    </Routes>
+    <div className="flex h-screen overflow-hidden">
+      {/* Sidebar */}
+      <Sidebar 
+        currentUser={{ username: authUsername, role: userRole }}
+        onLogout={handleLogout}
+      />
+      
+      {/* Main content area */}
+      <div className="flex-1 overflow-hidden">
+        <Routes>
+          <Route path="/" element={<Navigate to="/social" replace/>}/>
+          <Route path="/social" element={<PageShell><SocialFeed isDark={isDark} authUsername={authUsername} onViewProfile={u=>navigate(`/profile/@${u}`)}/></PageShell>}/>
+          <Route path="/portfolio" element={<PortfolioView/>}/>
+          <Route path="/portfolio/holdings" element={<PortfolioView/>}/>
+          <Route path="/portfolio/transactions" element={<PortfolioView/>}/>
+          <Route path="/portfolio/dividends" element={<PortfolioView/>}/>
+          <Route path="/portfolio/ownership" element={<PortfolioView/>}/>
+          <Route path="/cs-skins" element={<PageShell><CSSkins isDark={isDark} onBack={()=>navigate('/social')} authUsername={authUsername}/></PageShell>}/>
+          <Route path="/profile/edit" element={<PageShell><ProfileEditPage isDark={isDark} authUsername={authUsername}/></PageShell>}/>
+          <Route path="/profile" element={<ProfileRoute/>}/>
+          <Route path="/profile/:username" element={<ProfileRoute/>}/>
+          <Route path="/admin" element={<PageShell title="Admin Panel"><AdminPanel isDark={isDark} authUsername={authUsername}/></PageShell>}/>
+          <Route path="/admin/roles" element={<PageShell title="Admin Panel - Roles"><AdminPanel isDark={isDark} authUsername={authUsername}/></PageShell>}/>
+          <Route path="/moderator" element={<PageShell title="Moderator Panel"><ModeratorPanel isDark={isDark} authUsername={authUsername} userRole={userRole}/></PageShell>}/>
+          <Route path="*" element={<Navigate to="/social" replace/>}/>
+        </Routes>
+      </div>
+    </div>
   );
 }
