@@ -82,8 +82,8 @@ export default function ProfilePageView({ isDark, authUsername, viewUsername = n
   const [viewingHoldings, setViewingHoldings] = useState(null);
   const [loadingHoldings, setLoadingHoldings] = useState(false);
   const [showAllHoldings, setShowAllHoldings] = useState(false);
-  const [dividends, setDividends] = useState(null);
-  const [loadingDividends, setLoadingDividends] = useState(false);
+  const [userActivity, setUserActivity] = useState([]);
+  const [loadingActivity, setLoadingActivity] = useState(false);
 
   const h = { 'Content-Type': 'application/json', ...(sessionStorage.getItem('auth_token') ? { 'Authorization': `Bearer ${sessionStorage.getItem('auth_token')}` } : {}) };
 
@@ -97,10 +97,7 @@ export default function ProfilePageView({ isDark, authUsername, viewUsername = n
     }
     if (profile?.publicHoldings) {
       loadPublicHoldings();
-    }
-    // Load dividends if own profile OR if viewing someone else's public dividends
-    if (isOwnProfile || profile?.publicDividends) {
-      loadDividends();
+      loadUserActivity(); // Load activity when portfolio is visible
     }
   }, [profile]);
 
@@ -208,22 +205,18 @@ export default function ProfilePageView({ isDark, authUsername, viewUsername = n
     setLoadingHoldings(false);
   }
 
-  async function loadDividends() {
-    setLoadingDividends(true);
+  async function loadUserActivity() {
+    setLoadingActivity(true);
     try {
-      const endpoint = isOwnProfile ? '/api/dividends' : `/api/users/${targetUser}/dividends`;
-      const res = await fetch(endpoint, { headers: h });
+      const res = await fetch(`/api/users/${targetUser}/activity`, { headers: h });
       if (res.ok) {
         const data = await res.json();
-        setDividends(data);
-      } else if (res.status === 403) {
-        // Dividends are private
-        setDividends(null);
+        setUserActivity(data);
       }
     } catch(e) {
-      console.error('Failed to load dividends:', e);
+      console.error('Failed to load user activity:', e);
     }
-    setLoadingDividends(false);
+    setLoadingActivity(false);
   }
 
   function formatDate(d) {
@@ -435,61 +428,27 @@ export default function ProfilePageView({ isDark, authUsername, viewUsername = n
               )}
             </div>
 
-            {/* Dividends - Right Column */}
+            {/* Recent Activity - Right Column */}
             <div className={`${card} p-2.5`}>
               <div className="flex items-center justify-between mb-1.5">
                 <h3 className={`text-[10px] font-semibold uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  Dividends
+                  Recent Activity
                 </h3>
               </div>
 
-              {/* Show privacy message if not own profile and dividends are private */}
-              {!isOwnProfile && !profile.publicDividends ? (
-                <p className={`text-center py-8 text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                  Dividends are currently private
-                </p>
-              ) : loadingDividends ? (
+              {loadingActivity ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"/>
                 </div>
-              ) : dividends && dividends.byYear?.length > 0 ? (
-                <>
-                  {/* Total All Time */}
-                  <div className="text-center mb-4">
-                    <p className={`text-[10px] uppercase tracking-wide ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Total Received</p>
-                    <p className="text-2xl font-bold">{dividends.totalAllTime.toLocaleString('sv-SE', { maximumFractionDigits: 0 })}</p>
-                    <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>SEK</p>
-                  </div>
-
-                  {/* Bar Chart by Year */}
-                  <div className="flex items-end justify-between gap-1 h-40">
-                    {dividends.byYear.slice().reverse().slice(-8).map(yearData => {
-                      const maxTotal = Math.max(...dividends.byYear.map(y => y.total));
-                      const height = maxTotal > 0 ? (yearData.total / maxTotal) * 100 : 0;
-                      const currentYear = new Date().getFullYear();
-                      const isFuture = parseInt(yearData.year) > currentYear;
-                      
-                      return (
-                        <div key={yearData.year} className="flex-1 flex flex-col items-center gap-1">
-                          <div className="w-full flex items-end h-32">
-                            <div 
-                              className={`w-full rounded-t transition-all ${isFuture ? 'bg-linear-to-t from-pink-500/50 to-pink-400/50 bg-[length:4px_4px] bg-repeat' : 'bg-linear-to-t from-pink-500 to-pink-400'}`}
-                              style={{ 
-                                height: `${height}%`,
-                                backgroundImage: isFuture ? 'repeating-linear-gradient(45deg, transparent, transparent 2px, rgba(0,0,0,0.1) 2px, rgba(0,0,0,0.1) 4px)' : undefined
-                              }}
-                              title={`${yearData.year}: ${yearData.total.toLocaleString('sv-SE')} SEK`}
-                            />
-                          </div>
-                          <p className={`text-[9px] ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{yearData.year.slice(-2)}{isFuture ? 'e' : ''}</p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
+              ) : userActivity.length > 0 ? (
+                <div className="flex flex-col gap-2">
+                  {userActivity.map(activity => (
+                    <ActivityItem key={activity.id} activity={activity} isDark={isDark} />
+                  ))}
+                </div>
               ) : (
                 <p className={`text-center py-8 text-sm ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                  No dividend data
+                  No recent activity
                 </p>
               )}
             </div>
@@ -500,4 +459,87 @@ export default function ProfilePageView({ isDark, authUsername, viewUsername = n
       </div>
     </div>
   );
+}
+
+// Activity item component for profile page
+function ActivityItem({ activity, isDark }) {
+  const formatTime = (date) => {
+    const d = new Date(date);
+    const now = new Date();
+    const diffMs = now - d;
+    const diffMins = Math.floor(diffMs / 60000);
+    if (diffMins < 1) return 'just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return d.toLocaleDateString('sv-SE');
+  };
+
+  const itemBg = isDark ? 'bg-gray-700/30' : 'bg-gray-100';
+  const textSecondary = isDark ? 'text-gray-400' : 'text-gray-500';
+
+  if (activity.type === 'skin_trade') {
+    const isBuy = activity.tradeType === 'buy';
+    return (
+      <div className={`${itemBg} rounded-lg p-2`}>
+        <div className="flex items-center gap-2">
+          <span className={`text-sm font-bold ${isBuy ? 'text-green-400' : 'text-red-400'}`}>
+            {isBuy ? '↓' : '↑'}
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold truncate">{activity.skinName}</p>
+            <p className={`text-[10px] ${textSecondary}`}>
+              {formatTime(activity.created_at)}
+            </p>
+          </div>
+          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${isBuy ? 'bg-green-900/40 text-green-400' : 'bg-red-900/40 text-red-400'}`}>
+            {isBuy ? 'Buy' : 'Sell'}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  if (activity.type === 'holdings_update') {
+    return (
+      <div className={`${itemBg} rounded-lg p-2`}>
+        <div className="flex items-center gap-2">
+          <span className="text-sm">📊</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold">Portfolio updated</p>
+            <p className={`text-[10px] ${textSecondary}`}>
+              {formatTime(activity.created_at)}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (activity.type === 'skin_screenshot') {
+    return (
+      <div className={`${itemBg} rounded-lg p-2`}>
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-sm">📸</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold truncate">{activity.skinName}</p>
+            <p className={`text-[10px] ${textSecondary}`}>
+              {formatTime(activity.created_at)}
+            </p>
+          </div>
+        </div>
+        {activity.imageBase64 && (
+          <img 
+            src={activity.imageBase64} 
+            alt={activity.skinName} 
+            className="w-full rounded-md object-cover max-h-32"
+          />
+        )}
+      </div>
+    );
+  }
+
+  return null;
 }

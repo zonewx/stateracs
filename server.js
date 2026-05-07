@@ -940,6 +940,14 @@ app.get('/api/activity/mine', requireUser, async (req, res) => {
   res.json(data||[]);
 });
 
+// Get a specific user's public activity
+app.get('/api/users/:username/activity', async (req, res) => {
+  const { data: profile } = await supabase.from('profiles').select('id, username').eq('username', req.params.username).single();
+  if (!profile) return res.status(404).json({ error: 'User not found' });
+  const { data: activities } = await supabase.from('activity').select('*').eq('user_id', profile.id).order('created_at', { ascending:false }).limit(10);
+  res.json((activities || []).map(a => ({ ...a, username: profile.username })));
+});
+
 app.post('/api/activity/screenshot', requireUser, async (req, res) => {
   const { skinName, caption, imageBase64 } = req.body;
   if (!imageBase64) return res.status(400).json({ error: 'imageBase64 required.' });
