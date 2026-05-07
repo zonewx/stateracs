@@ -270,7 +270,7 @@ export default function ProfilePageView({ isDark, authUsername, viewUsername = n
                       <div className="absolute inset-0 rounded-full bg-black/20 blur-sm translate-y-0.5"></div>
                       {/* Badge with dynamic colors */}
                       <div 
-                        className="relative w-[60px] h-[60px] rounded-full flex items-center justify-center shadow-md"
+                        className="relative w-15 h-15 rounded-full flex items-center justify-center shadow-md"
                         style={{
                           background: `linear-gradient(to bottom, ${colors.from}, ${colors.to})`
                         }}
