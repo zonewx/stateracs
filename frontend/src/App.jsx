@@ -517,6 +517,7 @@ export default function App() {
 
   const PageShell = ({ children, title }) => (
     <div className={`flex flex-col h-screen ${isDark?'bg-gray-900 text-white':'bg-gray-100 text-gray-900'}`}>
+      <GB/>
       {title&&<div className={`px-8 py-3 border-b shrink-0 ${isDark?'border-gray-800 bg-gray-900':'border-gray-200 bg-white'}`}><h1 className="text-base font-bold">{title}</h1></div>}
       {children}
     </div>
@@ -893,17 +894,30 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/social" replace/>}/>
           <Route path="/social" element={<PageShell><SocialFeed isDark={isDark} authUsername={authUsername} onViewProfile={u=>navigate(`/profile/@${u}`)}/></PageShell>}/>
+          
+          {/* Portfolio routes */}
           <Route path="/portfolio" element={<PortfolioView/>}/>
           <Route path="/portfolio/holdings" element={<PortfolioView/>}/>
           <Route path="/portfolio/transactions" element={<PortfolioView/>}/>
           <Route path="/portfolio/dividends" element={<PortfolioView/>}/>
           <Route path="/portfolio/ownership" element={<PortfolioView/>}/>
+          <Route path="/portfolio/import" element={<PortfolioView/>}/>
+          <Route path="/portfolio/manage" element={<PortfolioView/>}/>
+          <Route path="/portfolio/settings" element={<PortfolioView/>}/>
+          <Route path="/portfolio/danger" element={<PortfolioView/>}/>
+          
           <Route path="/cs-skins" element={<PageShell><CSSkins isDark={isDark} onBack={()=>navigate('/social')} authUsername={authUsername}/></PageShell>}/>
           <Route path="/profile/edit" element={<PageShell><ProfileEditPage isDark={isDark} authUsername={authUsername}/></PageShell>}/>
           <Route path="/profile" element={<ProfileRoute/>}/>
           <Route path="/profile/:username" element={<ProfileRoute/>}/>
+          
+          {/* Admin routes */}
           <Route path="/admin" element={<PageShell title="Admin Panel"><AdminPanel isDark={isDark} authUsername={authUsername}/></PageShell>}/>
+          <Route path="/admin/users" element={<PageShell title="Admin Panel - Users"><AdminPanel isDark={isDark} authUsername={authUsername}/></PageShell>}/>
           <Route path="/admin/roles" element={<PageShell title="Admin Panel - Roles"><AdminPanel isDark={isDark} authUsername={authUsername}/></PageShell>}/>
+          <Route path="/admin/ticker-failures" element={<PageShell title="Admin Panel - Ticker Failures"><AdminPanel isDark={isDark} authUsername={authUsername}/></PageShell>}/>
+          <Route path="/admin/announcements" element={<PageShell title="Admin Panel - Announcements"><AdminPanel isDark={isDark} authUsername={authUsername}/></PageShell>}/>
+          
           <Route path="/moderator" element={<PageShell title="Moderator Panel"><ModeratorPanel isDark={isDark} authUsername={authUsername} userRole={userRole}/></PageShell>}/>
           <Route path="*" element={<Navigate to="/social" replace/>}/>
         </Routes>

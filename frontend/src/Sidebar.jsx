@@ -62,8 +62,8 @@ export default function Sidebar({ currentUser, onLogout }) {
 
   const menuItems = [
     {
-      id: 'social',
-      label: 'Social',
+      id: 'home',
+      label: 'Home',
       icon: Users,
       path: '/social',
       subItems: null
@@ -79,6 +79,11 @@ export default function Sidebar({ currentUser, onLogout }) {
         { id: 'transactions', label: 'Transactions', path: '/portfolio/transactions' },
         { id: 'dividends', label: 'Dividends', path: '/portfolio/dividends' },
         { id: 'ownership', label: 'Ownership', path: '/portfolio/ownership' },
+        { id: 'divider1', isDivider: true },
+        { id: 'import', label: 'Import CSV', path: '/portfolio/import' },
+        { id: 'manage', label: 'Manage Holdings', path: '/portfolio/manage' },
+        { id: 'settings', label: 'Settings', path: '/portfolio/settings' },
+        { id: 'danger', label: 'Danger Zone', path: '/portfolio/danger' },
       ]
     },
     {
@@ -94,8 +99,11 @@ export default function Sidebar({ currentUser, onLogout }) {
       icon: Shield,
       path: null,
       subItems: [
-        { id: 'users', label: 'Users', path: '/admin' },
+        { id: 'admin-overview', label: 'Overview', path: '/admin' },
+        { id: 'users', label: 'Users', path: '/admin/users' },
         { id: 'roles', label: 'Roles', path: '/admin/roles' },
+        { id: 'ticker-failures', label: 'Ticker Failures', path: '/admin/ticker-failures' },
+        { id: 'announcements', label: 'Announcements', path: '/admin/announcements' },
       ],
       adminOnly: true
     }
@@ -179,18 +187,28 @@ export default function Sidebar({ currentUser, onLogout }) {
             )}
 
             {/* Sub-menu items */}
-            {menuItems.find(m => m.id === activeSubMenu)?.subItems.map(subItem => (
-              <button
-                key={subItem.id}
-                onClick={() => handleSubItemClick(subItem.path)}
-                className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-                  isActive(subItem.path) ? activeBg : hoverBg
-                } ${textPrimary}`}
-              >
-                <div className="w-5" /> {/* Spacer for alignment */}
-                {isExpanded && <span className="text-sm">{subItem.label}</span>}
-              </button>
-            ))}
+            {menuItems.find(m => m.id === activeSubMenu)?.subItems.map(subItem => {
+              // Render divider
+              if (subItem.isDivider) {
+                return isExpanded ? (
+                  <div key={subItem.id} className={`my-2 border-t ${isDark ? 'border-gray-700' : 'border-gray-300'}`} />
+                ) : null;
+              }
+              
+              // Render regular item
+              return (
+                <button
+                  key={subItem.id}
+                  onClick={() => handleSubItemClick(subItem.path)}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+                    isActive(subItem.path) ? activeBg : hoverBg
+                  } ${textPrimary}`}
+                >
+                  <div className="w-5" /> {/* Spacer for alignment */}
+                  {isExpanded && <span className="text-sm">{subItem.label}</span>}
+                </button>
+              );
+            })}
           </div>
         ) : (
           // Main menu view
