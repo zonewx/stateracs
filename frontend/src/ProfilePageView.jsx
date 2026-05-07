@@ -36,37 +36,39 @@ function getSteamLevelColors(level) {
 // Get country flag emoji based on exchange suffix
 function getExchangeFlag(ticker) {
   const flags = {
-    'ST': '🇸🇪',   // Sweden
-    'OL': '🇳🇴',   // Norway
-    'CO': '🇩🇰',   // Denmark
-    'HE': '🇫🇮',   // Finland
-    'AS': '🇳🇱',   // Netherlands
-    'PA': '🇫🇷',   // France
-    'DE': '🇩🇪',   // Germany
-    'L': '🇬🇧',    // London
-    'MI': '🇮🇹',   // Italy
-    'MC': '🇪🇸',   // Spain
-    'SW': '🇨🇭',   // Switzerland
-    'TO': '🇨🇦',   // Canada
-    'AX': '🇦🇺',   // Australia
-    'HK': '🇭🇰',   // Hong Kong
-    'T': '🇯🇵',    // Japan
+    'ST': 'se',   // Sweden
+    'OL': 'no',   // Norway
+    'CO': 'dk',   // Denmark
+    'HE': 'fi',   // Finland
+    'AS': 'nl',   // Netherlands
+    'PA': 'fr',   // France
+    'DE': 'de',   // Germany
+    'L': 'gb',    // London/UK
+    'MI': 'it',   // Italy
+    'MC': 'es',   // Spain
+    'SW': 'ch',   // Switzerland
+    'TO': 'ca',   // Canada
+    'AX': 'au',   // Australia
+    'HK': 'hk',   // Hong Kong
+    'T': 'jp',    // Japan
   };
   
   const parts = ticker.split('.');
   if (parts.length > 1) {
     const suffix = parts[parts.length - 1];
-    return flags[suffix] || '🇺🇸';
+    return flags[suffix] || 'us';
   }
-  return '🇺🇸'; // Default to US for no suffix
+  return 'us'; // Default to US for no suffix
 }
 
 function FlagIcon({ ticker, size = 'w-10 h-10' }) {
-  const flag = getExchangeFlag(ticker);
+  const countryCode = getExchangeFlag(ticker);
   return (
-    <div className={`${size} flex items-center justify-center shrink-0`} style={{ fontSize: '2.5rem' }}>
-      {flag}
-    </div>
+    <img 
+      src={`https://flagcdn.com/${countryCode}.svg`} 
+      alt={countryCode.toUpperCase()} 
+      className={`${size} object-cover rounded`}
+    />
   );
 }
 
@@ -230,7 +232,7 @@ export default function ProfilePageView({ isDark, authUsername, viewUsername = n
             {/* User Info */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3 mb-2">
-                <span className="text-3xl">🇸🇪</span>
+                <img src="https://flagcdn.com/se.svg" alt="Sweden" className="w-8 h-6" />
                 <h2 className="text-4xl font-bold">{targetUser}</h2>
                 {profile.role && ROLE_BADGE[profile.role] && (
                   <span className={`text-xs px-2.5 py-1 rounded-full ${ROLE_BADGE[profile.role].cls}`}>
