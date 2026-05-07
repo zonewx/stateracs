@@ -157,7 +157,22 @@ export default function ProfilePageView({ isDark, authUsername, viewUsername = n
         }
         
         const portfolioData = await portfolioRes.json();
-        const portfolio = portfolioData.portfolio || [];
+        
+        // Defensive check - ensure we have valid data
+        if (!portfolioData || typeof portfolioData !== 'object') {
+          console.error('Invalid portfolio response:', portfolioData);
+          setViewingHoldings([]);
+          setLoadingHoldings(false);
+          return;
+        }
+        
+        const portfolio = Array.isArray(portfolioData.portfolio) ? portfolioData.portfolio : [];
+        
+        if (portfolio.length === 0) {
+          setViewingHoldings([]);
+          setLoadingHoldings(false);
+          return;
+        }
         
         // Calculate weights
         const totalValue = portfolio.reduce((sum, h) => sum + (h.currentValue || 0), 0);
