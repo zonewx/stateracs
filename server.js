@@ -972,9 +972,9 @@ app.get('/api/users/:username/activity', async (req, res) => {
 
 app.post('/api/activity/screenshot', requireUser, async (req, res) => {
   const { skinName, caption, imageBase64 } = req.body;
-  if (!imageBase64) return res.status(400).json({ error: 'imageBase64 required.' });
-  if (imageBase64.length > 1.5 * 1024 * 1024) return res.status(400).json({ error: 'Image too large. Maximum 1 MB.' });
-  await appendActivity(req.user.id, 'skin_screenshot', { skinName:skinName||'Unknown skin', caption:caption||'', imageBase64 });
+  if (!skinName) return res.status(400).json({ error: 'Skin name required.' });
+  if (imageBase64 && imageBase64.length > 1.5 * 1024 * 1024) return res.status(400).json({ error: 'Image too large. Maximum 1 MB.' });
+  await appendActivity(req.user.id, 'skin_screenshot', { skinName: skinName||'Unknown skin', caption: caption||'', imageBase64: imageBase64||null });
   res.json({ success:true });
 });
 

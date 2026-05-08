@@ -307,7 +307,7 @@ export default function SocialFeed({ isDark, authUsername, onViewProfile }) {
                 ))}
               </div>
               <div className="flex gap-2">
-                <button onClick={() => setShowUpload(v => !v)} className={btnGhost}>📸 Post screenshot</button>
+                <button onClick={() => setShowUpload(v => !v)} className={btnGhost}>📸 Post</button>
                 <button onClick={tab === 'feed' ? fetchFeed : fetchFeed} disabled={feedLoading} className={btnGhost}>
                   {feedLoading ? <span className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin inline-block"/> : '↺ Refresh'}
                 </button>
