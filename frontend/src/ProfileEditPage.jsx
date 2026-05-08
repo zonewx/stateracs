@@ -400,32 +400,6 @@ export default function ProfileEditPage({ isDark, authUsername }) {
               </div>
             )}
 
-            {/* Preview */}
-            <div className={`${card} p-6`}>
-              <label className={`${labelCls} mb-4`}>Preview - How others see you</label>
-              <div className="flex items-start gap-4">
-                <AvatarDisplay src={editForm.avatarBase64} username={authUsername} size="w-20 h-20" textSize="text-3xl" />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center flex-wrap gap-2 mb-1">
-                    <span className="font-bold text-lg">{authUsername}</span>
-                    {profile?.role && ROLE_BADGE[profile.role] && (
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${ROLE_BADGE[profile.role].cls}`}>{ROLE_BADGE[profile.role].label}</span>
-                    )}
-                  </div>
-                  <p className={`text-xs mb-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Member since {formatDate(profile?.createdAt)}</p>
-                  {editForm.bio ? (
-                    <p className={`text-sm leading-relaxed mb-3 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>{editForm.bio}</p>
-                  ) : (
-                    <p className={`text-sm italic mb-3 ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>No bio yet</p>
-                  )}
-                  <div className="flex flex-wrap gap-2">
-                    {editForm.steamId && <span className={`text-xs px-2 py-0.5 rounded-full ${steamVerified ? 'text-green-400 bg-green-900/30' : 'text-orange-400 bg-orange-900/30'}`}>{steamVerified ? '✓ Steam verified' : 'Steam (unverified)'}</span>}
-                    {editForm.publicInventory && <span className="text-xs text-green-400 bg-green-900/30 px-2 py-0.5 rounded-full">Public CS inv.</span>}
-                    {editForm.publicHoldings && <span className="text-xs text-blue-400 bg-blue-900/30 px-2 py-0.5 rounded-full">Public portfolio</span>}
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
         </div>
 

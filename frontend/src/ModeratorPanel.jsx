@@ -172,7 +172,7 @@ export default function ModeratorPanel({ isDark, authUsername, userRole }) {
                       {announcements.map(a => (
                         <div key={a.id} className={`flex items-start gap-3 p-4 rounded-xl border ${typeColors[a.type]}`}>
                           <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-1"><p className="font-semibold text-sm">{a.title}</p><span className="text-xs opacity-60">by {a.postedBy || 'admin'}</span></div>
+                            <div className="flex items-center gap-2 mb-1"><p className="font-semibold text-sm">{a.title}</p><span className="text-xs opacity-60">by {a.posted_by || a.postedBy}</span></div>
                             <p className="text-xs opacity-80">{a.message}</p>
                           </div>
                           <button onClick={() => deleteAnn(a.id)} className="text-sm opacity-60 hover:opacity-100 hover:text-red-400 transition shrink-0">✕</button>
