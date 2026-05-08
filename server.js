@@ -217,11 +217,12 @@ app.get('/api/users/:username/holdings', async (req, res) => {
   const tickers = validHoldings.map(h => h.ticker);
   let pricesMap = {};
   try {
-    const yahooFinance = await import('yahoo-finance2').then(m => m.default);
-    const quotes = await yahooFinance.quote(tickers);
-    const quotesArray = Array.isArray(quotes) ? quotes : [quotes];
-    quotesArray.forEach(q => { if (q && q.symbol && q.regularMarketPrice) pricesMap[q.symbol] = q.regularMarketPrice; });
-  } catch(e) { console.error('Failed to fetch prices:', e); }
+    if (tickers.length > 0) {
+      const quotes = await yahooFinance.quote(tickers);
+      const quotesArray = Array.isArray(quotes) ? quotes : [quotes];
+      quotesArray.forEach(q => { if (q?.symbol && q.regularMarketPrice) pricesMap[q.symbol] = q.regularMarketPrice; });
+    }
+  } catch(e) { console.error('Failed to fetch prices for public holdings:', e.message); }
   
   // Calculate values and weights
   let totalValue = 0;

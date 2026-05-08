@@ -320,18 +320,46 @@ export default function SocialFeed({ isDark, authUsername, onViewProfile }) {
               </div>
             </div>
 
-            {/* Screenshot upload form */}
+            {/* Post form */}
             {showUpload && (
-              <div className={`${card} p-5 mb-4`}>
-                <h3 className="font-bold mb-3">Post skin screenshot</h3>
-                <div className="flex flex-col gap-3">
-                  <input value={uploadForm.skinName} onChange={e => setUploadForm(f => ({ ...f, skinName: e.target.value }))} placeholder="Skin name (e.g. AK-47 | Redline FT)" className={inputCls} />
-                  <input value={uploadForm.caption} onChange={e => setUploadForm(f => ({ ...f, caption: e.target.value }))} placeholder="Caption (optional)" className={inputCls} />
-                  <label className={`flex items-center justify-center gap-2 p-4 rounded-xl border-2 border-dashed cursor-pointer transition ${isDark ? 'border-gray-600 hover:border-blue-500 text-gray-400' : 'border-gray-200 hover:border-blue-400 text-gray-500'}`}>
-                    {uploadForm.imageBase64 ? <img src={uploadForm.imageBase64} className="max-h-40 rounded-lg object-contain" /> : <><span className="text-2xl">📸</span><span className="text-sm">Click to select screenshot</span></>}
+              <div className={`${card} mb-4 overflow-hidden`}>
+                <div className={`px-5 py-3 border-b ${isDark ? 'border-gray-700 bg-gray-800/50' : 'border-gray-100 bg-gray-50'} flex items-center justify-between`}>
+                  <h3 className="font-semibold text-sm">New Post</h3>
+                  <button onClick={() => { setShowUpload(false); setUploadForm({ skinName: '', caption: '', imageBase64: null }); }} className={`text-xs ${isDark ? 'text-gray-500 hover:text-white' : 'text-gray-400 hover:text-gray-900'} transition`}>✕</button>
+                </div>
+                <div className="p-5 flex flex-col gap-3">
+                  <input
+                    value={uploadForm.skinName}
+                    onChange={e => setUploadForm(f => ({ ...f, skinName: e.target.value }))}
+                    placeholder="Title"
+                    className={inputCls}
+                  />
+                  <input
+                    value={uploadForm.caption}
+                    onChange={e => setUploadForm(f => ({ ...f, caption: e.target.value }))}
+                    placeholder="Information"
+                    className={inputCls}
+                  />
+                  <label className={`flex flex-col items-center justify-center gap-2 py-6 rounded-xl border-2 border-dashed cursor-pointer transition ${isDark ? 'border-gray-700 hover:border-blue-500 hover:bg-blue-900/10 text-gray-500' : 'border-gray-200 hover:border-blue-400 hover:bg-blue-50 text-gray-400'}`}>
+                    {uploadForm.imageBase64 ? (
+                      <img src={uploadForm.imageBase64} className="max-h-48 rounded-lg object-contain" />
+                    ) : (
+                      <>
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                          <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>
+                        </svg>
+                        <span className="text-sm">Click to select image</span>
+                        <span className={`text-xs ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>Optional</span>
+                      </>
+                    )}
                     <input type="file" accept="image/*" className="hidden" onChange={e => handleImageUpload(e.target.files[0])} />
                   </label>
-                  <div className="flex gap-2">
+                  {uploadForm.imageBase64 && (
+                    <button onClick={() => setUploadForm(f => ({ ...f, imageBase64: null }))} className={`text-xs ${isDark ? 'text-gray-500 hover:text-red-400' : 'text-gray-400 hover:text-red-500'} transition text-left`}>
+                      Remove image
+                    </button>
+                  )}
+                  <div className="flex gap-2 pt-1">
                     <button onClick={postScreenshot} disabled={uploading || !uploadForm.skinName.trim()} className={btnPrimary}>{uploading ? 'Posting...' : 'Post'}</button>
                     <button onClick={() => { setShowUpload(false); setUploadForm({ skinName: '', caption: '', imageBase64: null }); }} className={btnGhost}>Cancel</button>
                   </div>
