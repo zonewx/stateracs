@@ -139,9 +139,23 @@ export default function SocialFeed({ isDark, authUsername, onViewProfile }) {
   const fetchFeed = useCallback(async () => {
     setFeedLoading(true);
     try {
-      const data = await fetch('/api/feed', { headers: h }).then(r => r.json());
-      setFeed(Array.isArray(data) ? data : []);
-    } catch(e) {}
+      const token = sessionStorage.getItem('auth_token');
+      const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
+      const res = await fetch('/api/feed', { headers });
+      if (!res.ok) {
+        console.error('Feed API error:', res.status, await res.text());
+        setFeedLoading(false);
+        return;
+      }
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setFeed(data);
+      } else {
+        console.error('Feed returned non-array:', data);
+      }
+    } catch(e) {
+      console.error('Feed fetch error:', e);
+    }
     setFeedLoading(false);
   }, [authUsername]);
 
