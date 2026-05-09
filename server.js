@@ -358,7 +358,7 @@ async function resolveSymbolBatch(transactions, userId) {
       userId, cache, overrides
     );
     results[key] = ticker;
-    await new Promise(r => setTimeout(r, 120));
+    await new Promise(r => setTimeout(r, 80)); // Reduced from 120ms - smaller chunks need less delay
   }
   return results;
 }
