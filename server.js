@@ -285,8 +285,8 @@ async function loadOverrides(userId) {
 // ── Ticker resolution ───────────────────────────────────────────────────────
 const YahooFinance = require('yahoo-finance2').default;
 const yahooFinance = new YahooFinance({ 
-  suppressNotices: ['yahooSurvey', 'ripHistorical'],
-  validateResult: false  // ADD THIS
+  suppressNotices: ['yahooSurvey', 'ripHistorical']
+  // REMOVE validateResult: false
 });
 
 // Currency suffix priority lists for Yahoo Finance
@@ -822,7 +822,9 @@ app.post('/api/portfolio', requireUser, async (req, res) => {
   const results=[];
   for (const h of portfolio) {
     try {
-      const q = await yahooFinance.quote(h.ticker);
+      const q = await yahooFinance.quote(h.ticker, {}, { 
+        fetchOptions: { timeout: 10000 }
+    });
       if (!q) continue;
       const nativePrice=q.regularMarketPrice||0, prevClose=q.regularMarketPreviousClose||nativePrice, currency=q.currency||'SEK';
       const currentValueBase=fromSEK(toSEK(nativePrice*h.quantity,currency)), costBase=fromSEK(toSEK((h.avgPrice||0)*h.quantity,currency)), profitBase=currentValueBase-costBase;
