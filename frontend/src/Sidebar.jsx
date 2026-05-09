@@ -32,8 +32,22 @@ function ActionContent({ id, pa, isDark, selectedBroker, onBrokerChange }) {
         {pa.uploadLoading ? <>{spinner}Processing…</> : pa.uploadStatus ? '↺ Re-upload' : '↑ Upload CSV'}
         <input type="file" accept=".csv" multiple className="hidden" disabled={pa.uploadLoading} onChange={e => { pa.onUpload(e.target.files); e.target.value=''; }} />
       </label>
-      <p className={`text-[10px] ${sub}`}>Supports Montrose, Avanza, Nordnet.</p>
-      {pa.uploadProgress && <p className="text-xs text-blue-400 font-medium flex items-center gap-1">{spinner}{pa.uploadProgress.label}</p>}
+      <p className={`text-[10px] ${sub}`}>Supports Avanza, Montrose, Nordnet.</p>
+      {pa.uploadProgress && (
+        <div className="rounded-lg px-3 py-2.5 text-sm border bg-blue-900/20 border-blue-800/40 text-blue-300">
+          <div className="flex items-center gap-2">
+            <div className="animate-spin">⏳</div>
+            <span className="font-medium flex-1">{pa.uploadProgress.label}</span>
+            <button 
+              onClick={pa.onCancelUpload}
+              className="text-xs text-red-400 hover:text-red-300 font-semibold transition"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      
       {pa.uploadStatus?.error && <p className="text-[10px] text-red-400">✗ {pa.uploadStatus.error}</p>}
       {!pa.uploadProgress && pa.uploadStatus?.results && (
         <div className="flex flex-col gap-1">

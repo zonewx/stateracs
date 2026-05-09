@@ -71,6 +71,7 @@ export default function App() {
   const globalSearchRef = useRef(null);
   const [selectedBroker, setSelectedBroker] = useState('auto');
   const [txCount, setTxCount] = useState({ total: 0, trades: 0, byBroker: {} });
+  const [uploadAborted, setUploadAborted] = useState(false);
 
   // ── API helper ─────────────────────────────────────────────────────────────
   const apiFetch = useCallback(async (url, opts = {}) => {
@@ -342,6 +343,13 @@ const handleUpload = async (files) => {
     let failures = 0;
     
     while (remaining > 0 && failures < 3) {
+      if (uploadAborted) {
+        updateProgress('cancelled', progress, '✗ Upload cancelled');
+        setTimeout(() => setUploadProgress(null), 2000);
+        setUploadAborted(false); // Reset for next upload
+        return;
+      }
+
       try {
         const chunkStart = Date.now();
         const chunkRes = await apiFetch('/api/transactions/resolve', { 
@@ -1152,6 +1160,7 @@ const handleUpload = async (files) => {
         onClearTransactions: handleClearTransactions,
         onClearAll: handleClearAll,
         onClearBroker: handleClearBroker,
+        onCancelUpload: () => setUploadAborted(true),
       }}
     />
       
