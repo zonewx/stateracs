@@ -249,7 +249,7 @@ export default function ProfilePageView({ isDark, authUsername, viewUsername = n
             {/* User Info */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3 mb-2">
-                <img src="https://flagcdn.com/se.svg" alt="Sweden" className="w-8 h-6" />
+                <img src={`https://flagcdn.com/${profile.country || 'se'}.svg`} alt={profile.country || 'se'} className="w-8 h-6" />
                 <h2 className="text-4xl font-bold">{targetUser}</h2>
                 {profile.role && ROLE_BADGE[profile.role] && (
                   <span className={`text-xs px-2.5 py-1 rounded-full ${ROLE_BADGE[profile.role].cls}`}>
@@ -285,23 +285,18 @@ export default function ProfilePageView({ isDark, authUsername, viewUsername = n
               )}
             </div>
 
-            {/* Right Side: Level Badge + Edit Button */}
+            {/* Right Side: Level Badge */}
             <div className="flex flex-col items-end gap-6 shrink-0">
-              {/* Steam Level Badge - Dynamic colors based on level tier */}
               {profile.steamLevel > 0 && (() => {
                 const colors = getSteamLevelColors(profile.steamLevel);
                 return (
                   <div className="flex items-center gap-3">
                     <span className={`text-sm font-normal ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Level</span>
                     <div className="relative">
-                      {/* Simple shadow for depth */}
                       <div className="absolute inset-0 rounded-full bg-black/20 blur-sm translate-y-0.5"></div>
-                      {/* Badge with dynamic colors */}
                       <div 
-                        className="relative w-[60px] h-[60px] rounded-full flex items-center justify-center shadow-md"
-                        style={{
-                          background: `linear-gradient(to bottom, ${colors.from}, ${colors.to})`
-                        }}
+                        className="relative w-15 h-15 rounded-full flex items-center justify-center shadow-md"
+                        style={{ background: `linear-gradient(to bottom, ${colors.from}, ${colors.to})` }}
                       >
                         <span className="text-white font-bold text-[22px] drop-shadow-md">{profile.steamLevel}</span>
                       </div>
@@ -309,16 +304,6 @@ export default function ProfilePageView({ isDark, authUsername, viewUsername = n
                   </div>
                 );
               })()}
-
-              {/* Edit Profile Button */}
-              {isOwnProfile && (
-                <button
-                  onClick={() => navigate('/profile/edit')}
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-md font-medium transition shadow-sm"
-                >
-                  Edit Profile
-                </button>
-              )}
             </div>
           </div>
         </div>

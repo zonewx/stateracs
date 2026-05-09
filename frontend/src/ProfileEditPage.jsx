@@ -1,6 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+const COUNTRIES = [
+  { code: 'se', name: '🇸🇪 Sweden' }, { code: 'no', name: '🇳🇴 Norway' }, { code: 'dk', name: '🇩🇰 Denmark' },
+  { code: 'fi', name: '🇫🇮 Finland' }, { code: 'de', name: '🇩🇪 Germany' }, { code: 'gb', name: '🇬🇧 United Kingdom' },
+  { code: 'fr', name: '🇫🇷 France' }, { code: 'es', name: '🇪🇸 Spain' }, { code: 'it', name: '🇮🇹 Italy' },
+  { code: 'nl', name: '🇳🇱 Netherlands' }, { code: 'pl', name: '🇵🇱 Poland' }, { code: 'ch', name: '🇨🇭 Switzerland' },
+  { code: 'at', name: '🇦🇹 Austria' }, { code: 'be', name: '🇧🇪 Belgium' }, { code: 'pt', name: '🇵🇹 Portugal' },
+  { code: 'us', name: '🇺🇸 United States' }, { code: 'ca', name: '🇨🇦 Canada' }, { code: 'au', name: '🇦🇺 Australia' },
+  { code: 'nz', name: '🇳🇿 New Zealand' }, { code: 'jp', name: '🇯🇵 Japan' }, { code: 'cn', name: '🇨🇳 China' },
+  { code: 'sg', name: '🇸🇬 Singapore' }, { code: 'in', name: '🇮🇳 India' }, { code: 'br', name: '🇧🇷 Brazil' },
+  { code: 'za', name: '🇿🇦 South Africa' }, { code: 'ae', name: '🇦🇪 UAE' }, { code: 'ru', name: '🇷🇺 Russia' },
+];
+
 const ROLE_BADGE = {
   admin: { label: 'Admin', cls: 'bg-red-900/40 text-red-400 border border-red-800' },
   moderator: { label: 'Moderator', cls: 'bg-blue-900/40 text-blue-400 border border-blue-800' },
@@ -9,7 +21,7 @@ const ROLE_BADGE = {
 function AvatarDisplay({ src, username, size = 'w-24 h-24', textSize = 'text-4xl' }) {
   if (src) return <img src={src} alt={username} className={`${size} rounded-full object-cover border-4 border-gray-700`} />;
   const initial = username?.[0]?.toUpperCase() || '?';
-  return <div className={`${size} rounded-full bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center ${textSize} font-bold text-white border-4 border-gray-700`}>{initial}</div>;
+  return <div className={`${size} rounded-full bg-linear-to-br from-blue-600 to-blue-800 flex items-center justify-center ${textSize} font-bold text-white border-4 border-gray-700`}>{initial}</div>;
 }
 
 const Toggle = ({ value, onChange }) => (
@@ -22,7 +34,7 @@ const Toggle = ({ value, onChange }) => (
 export default function ProfileEditPage({ isDark, authUsername }) {
   const navigate = useNavigate();
   const [profile, setProfile] = useState(null);
-  const [editForm, setEditForm] = useState({ bio: '', steamId: '', publicInventory: false, publicHoldings: false, publicDividends: false, showPortfolioValue: false, avatarBase64: null, showcaseItems: [] });
+  const [editForm, setEditForm] = useState({ bio: '', steamId: '', publicInventory: false, publicHoldings: false, publicDividends: false, showPortfolioValue: false, avatarBase64: null, showcaseItems: [], country: 'se' });
   const [steamVerified, setSteamVerified] = useState(false);
   const [steamLookupError, setSteamLookupError] = useState('');
   const [steamLookupLoading, setSteamLookupLoading] = useState(false);
@@ -72,7 +84,8 @@ export default function ProfileEditPage({ isDark, authUsername }) {
         publicDividends: data.publicDividends || false,
         showPortfolioValue: data.showPortfolioValue || false, 
         avatarBase64: data.avatarBase64 || null,
-        showcaseItems: data.showcaseItems || []
+        showcaseItems: data.showcaseItems || [],
+        country: data.country || 'se'
       });
       setSelectedShowcaseItems(data.showcaseItems || []);
       setSteamVerified(data.steamVerified || false);
@@ -305,6 +318,21 @@ export default function ProfileEditPage({ isDark, authUsername }) {
               <label className={labelCls}>Bio</label>
               <textarea value={editForm.bio} onChange={e => setEditForm(f => ({ ...f, bio: e.target.value }))} rows={4} maxLength={200} placeholder="Tell the community about yourself..." className={`${inputCls} resize-none`} />
               <p className={`text-xs mt-1 ${isDark ? 'text-gray-600' : 'text-gray-400'}`}>{editForm.bio.length}/200</p>
+            </div>
+
+            {/* Country */}
+            <div className={`${card} p-6`}>
+              <label className={labelCls}>Country</label>
+              <div className="flex items-center gap-3 mt-2">
+                <img src={`https://flagcdn.com/${editForm.country}.svg`} alt={editForm.country} className="w-8 h-6 rounded-sm" />
+                <select
+                  value={editForm.country}
+                  onChange={e => setEditForm(f => ({ ...f, country: e.target.value }))}
+                  className={`${inputCls} flex-1`}
+                >
+                  {COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
+                </select>
+              </div>
             </div>
 
             {/* Steam Account */}
