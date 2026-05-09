@@ -284,7 +284,10 @@ async function loadOverrides(userId) {
 
 // ── Ticker resolution ───────────────────────────────────────────────────────
 const YahooFinance = require('yahoo-finance2').default;
-const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey', 'ripHistorical'] });
+const yahooFinance = new YahooFinance({ 
+  suppressNotices: ['yahooSurvey', 'ripHistorical'],
+  validateResult: false  // ADD THIS
+});
 
 // Currency suffix priority lists for Yahoo Finance
 const CURRENCY_SUFFIX_MAP = {
