@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const https = require('https');
+const crypto = require('crypto');
 const { supabase } = require('./supabase');
 
 // Simple in-memory rate limiter for auth routes
@@ -157,7 +158,7 @@ app.get('/api/users', requireUser, async (req, res) => {
 app.get('/api/users/:username/profile', async (req, res) => {
   const { data, error } = await supabase.from('profiles').select('*').eq('username', req.params.username).single();
   if (error || !data) return res.status(404).json({ error: 'User not found' });
-  res.json({ username: data.username, role: data.role, bio: data.bio, country: data.country || 'se', publicInventory: data.public_inventory, publicHoldings: data.public_holdings, publicDividends: data.public_dividends, showPortfolioValue: data.show_portfolio_value, steamId: data.steam_id || null, steamVerified: data.steam_verified || false, steamLevel: data.steam_level || 0, showcaseItems: data.showcase_items || [], avatarBase64: data.avatar_base64, createdAt: data.created_at });
+  res.json({ username: data.username, role: data.role, bio: data.bio, country: data.country || 'se', publicInventory: data.public_inventory, publicHoldings: data.public_holdings, publicDividends: data.public_dividends, showPortfolioValue: data.show_portfolio_value, steamId: data.public_inventory ? (data.steam_id || null) : null, steamVerified: data.public_inventory ? (data.steam_verified || false) : false, steamLevel: data.public_inventory ? (data.steam_level || 0) : 0, showcaseItems: data.showcase_items || [], avatarBase64: data.avatar_base64, createdAt: data.created_at });
 });
 
 app.put('/api/users/:username/profile', requireUser, async (req, res) => {
@@ -171,7 +172,10 @@ app.put('/api/users/:username/profile', requireUser, async (req, res) => {
   if (publicHoldings !== undefined) update.public_holdings = publicHoldings;
   if (publicDividends !== undefined) update.public_dividends = publicDividends;
   if (showPortfolioValue !== undefined) update.show_portfolio_value = showPortfolioValue;
-  if (avatarBase64 !== undefined) update.avatar_base64 = avatarBase64;
+  if (avatarBase64 !== undefined) {
+    if (avatarBase64 && avatarBase64.length > 1.5 * 1024 * 1024) return res.status(400).json({ error: 'Avatar too large. Maximum 1 MB.' });
+    update.avatar_base64 = avatarBase64;
+  }
   if (showcaseItems !== undefined) {
     const items = Array.isArray(showcaseItems) ? showcaseItems.slice(0, 10) : [];
     update.showcase_items = items;
@@ -1035,6 +1039,7 @@ app.get('/api/cs/prices/search/:query', requireUser, async (req, res) => {
 });
 
 app.get('/api/cs/steam/inventory/:steamId', requireUser, async (req, res) => {
+  if (!/^\d{17}$/.test(req.params.steamId)) return res.status(400).json({ error: 'Invalid Steam ID' });
   try {
     const data = await fetchJSON(`https://steamcommunity.com/inventory/${req.params.steamId}/730/2?l=english&count=500`);
     if (!data?.assets) return res.status(404).json({ error:'Inventory not found or private' });
@@ -1285,14 +1290,17 @@ app.delete('/api/mod/announcements/:id', requireModerator, async (req, res) => {
 const STEAM_OPENID_URL = 'https://steamcommunity.com/openid/login';
 const BASE_URL = process.env.BASE_URL || (process.env.NODE_ENV === 'production' ? 'https://verumen.com' : 'http://localhost:5173');
 
+// Short-lived opaque state tokens: code → { userId, expiresAt }
+const steamLinkTokens = new Map();
+
 // Step 1: Redirect user to Steam login
 app.get('/api/steam/auth', requireUser, (req, res) => {
-  // Store user id in a temp token so we know who to link after callback
-  const token = req.headers.authorization?.replace('Bearer ', '');
+  const state = crypto.randomBytes(24).toString('hex');
+  steamLinkTokens.set(state, { userId: req.user.id, expiresAt: Date.now() + 5 * 60 * 1000 });
   const params = new URLSearchParams({
     'openid.ns': 'http://specs.openid.net/auth/2.0',
     'openid.mode': 'checkid_setup',
-    'openid.return_to': `${BASE_URL}/api/steam/callback?token=${encodeURIComponent(token)}`,
+    'openid.return_to': `${BASE_URL}/api/steam/callback?state=${state}`,
     'openid.realm': BASE_URL,
     'openid.identity': 'http://specs.openid.net/auth/2.0/identifier_select',
     'openid.claimed_id': 'http://specs.openid.net/auth/2.0/identifier_select',
@@ -1302,22 +1310,30 @@ app.get('/api/steam/auth', requireUser, (req, res) => {
 
 // Step 2: Steam redirects back here after login
 app.get('/api/steam/callback', async (req, res) => {
-  const { token, ...openidParams } = req.query;
+  const { state, ...openidParams } = req.query;
+
+  // Consume the state token — single use, reject if missing/expired
+  const pending = steamLinkTokens.get(state);
+  steamLinkTokens.delete(state);
+  if (!pending || Date.now() > pending.expiresAt) {
+    return res.redirect(`${BASE_URL}/profile?steam_error=session`);
+  }
+  const userId = pending.userId;
 
   // Verify the OpenID response with Steam
   try {
     const verifyParams = new URLSearchParams({ ...openidParams, 'openid.mode': 'check_authentication' });
-    const verifyRes = await fetchJSON(`${STEAM_OPENID_URL}?${verifyParams.toString()}`).catch(() => null);
+    const verifyRes = await fetch(`${STEAM_OPENID_URL}?${verifyParams.toString()}`);
+    const verifyText = await verifyRes.text();
+    if (!verifyText.includes('is_valid:true')) {
+      return res.redirect(`${BASE_URL}/profile?steam_error=invalid`);
+    }
 
     // Extract SteamID from claimed_id (format: https://steamcommunity.com/openid/id/STEAMID64)
     const claimedId = openidParams['openid.claimed_id'] || '';
     const steamIdMatch = claimedId.match(/\/id\/(\d+)$/);
     if (!steamIdMatch) return res.redirect(`${BASE_URL}/profile?steam_error=invalid`);
     const steamId = steamIdMatch[1];
-
-    // Verify the token and get user
-    const { data: { user }, error } = await supabase.auth.getUser(token);
-    if (error || !user) return res.redirect(`${BASE_URL}/profile?steam_error=session`);
 
     // Get Steam profile info and level
     const STEAM_KEY = process.env.STEAM_API_KEY;
@@ -1328,7 +1344,7 @@ app.get('/api/steam/callback', async (req, res) => {
         const data = await fetchJSON(`https://api.steampowered.com/ISteamUser/GetPlayerSummaries/v0002/?key=${STEAM_KEY}&steamids=${steamId}`);
         const player = data?.response?.players?.[0];
         if (player) { steamName = player.personaname; steamAvatar = player.avatarmedium; }
-        
+
         // Fetch Steam level
         const levelData = await fetchJSON(`https://api.steampowered.com/IPlayerService/GetSteamLevel/v1/?key=${STEAM_KEY}&steamid=${steamId}`);
         steamLevel = levelData?.response?.player_level || 0;
@@ -1338,11 +1354,11 @@ app.get('/api/steam/callback', async (req, res) => {
     }
 
     // Save verified Steam ID and level
-    await supabase.from('profiles').update({ 
-      steam_id: steamId, 
+    await supabase.from('profiles').update({
+      steam_id: steamId,
       steam_verified: true,
-      steam_level: steamLevel 
-    }).eq('id', user.id);
+      steam_level: steamLevel
+    }).eq('id', userId);
 
     // Redirect back to profile with success
     res.redirect(`${BASE_URL}/profile?steam_success=1&steam_name=${encodeURIComponent(steamName)}`);
