@@ -1050,7 +1050,8 @@ app.get('/api/cs/steam/inventory/:steamId', requireUser, async (req, res) => {
 });
 
 app.get('/api/cs/inventory', requireUser, async (req, res) => {
-  const { data } = await supabase.from('cs_inventory').select('*, cs_sales(*), cs_price_cache(price_sek, price_usd)').eq('user_id', req.user.id).order('purchase_date', { ascending:false });
+  const { data, error } = await supabase.from('cs_inventory').select('*, cs_sales(*), cs_price_cache(price_sek, price_usd)').eq('user_id', req.user.id).order('purchase_date', { ascending:false });
+  if (error) { log.error('cs_inventory GET failed', { error: error.message, userId: req.user.id }); return res.status(500).json({ error: error.message }); }
   res.json((data||[]).map(item=>({ ...item, current_price_sek:item.cs_price_cache?.price_sek, sale_price:item.cs_sales?.[0]?.sale_price, sale_date:item.cs_sales?.[0]?.sale_date })));
 });
 
