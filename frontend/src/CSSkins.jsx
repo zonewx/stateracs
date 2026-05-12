@@ -54,6 +54,11 @@ function SteamScreenshotEmbed({ url, isDark }) {
   );
 }
 
+function authHeaders(extra = {}) {
+  const token = sessionStorage.getItem('auth_token');
+  return { ...(token ? { 'Authorization': `Bearer ${token}` } : {}), ...extra };
+}
+
 export default function CSSkins({ isDark, authUsername }) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -112,15 +117,16 @@ export default function CSSkins({ isDark, authUsername }) {
 
   const fetchAll = useCallback(async () => {
     try {
+      const h = authHeaders();
       const [inv, p, s] = await Promise.all([
-        fetch('/api/cs/inventory').then(r => r.json()),
-        fetch('/api/cs/pnl').then(r => r.json()),
-        fetch('/api/cs/settings').then(r => r.json()),
+        fetch('/api/cs/inventory', { headers: h }).then(r => r.json()),
+        fetch('/api/cs/pnl', { headers: h }).then(r => r.json()),
+        fetch('/api/cs/settings', { headers: h }).then(r => r.json()),
       ]);
       setInventory(Array.isArray(inv) ? inv : []);
       setPnl(p);
       setSettings(s);
-      const priceCheck = await fetch('/api/cs/prices/search/AK-47').then(r => r.json());
+      const priceCheck = await fetch('/api/cs/prices/search/AK-47', { headers: h }).then(r => r.json());
       setPricesReady(Array.isArray(priceCheck) && priceCheck.length > 0);
     } catch(e) { console.error(e); }
   }, []);
@@ -131,7 +137,7 @@ export default function CSSkins({ isDark, authUsername }) {
     setSyncingPrices(true);
     setSyncStatus('Downloading CS item prices (~30 sec)...');
     try {
-      const res = await fetch('/api/cs/prices/sync', { method: 'POST' });
+      const res = await fetch('/api/cs/prices/sync', { method: 'POST', headers: authHeaders() });
       const data = await res.json();
       if (data.success) {
         setSyncStatus(`✓ Synced ${data.count.toLocaleString()} items (${data.source})${data.note ? ' — ' + data.note : ''} at ${data.sekRate?.toFixed(2)} SEK/USD`);
@@ -147,7 +153,7 @@ export default function CSSkins({ isDark, authUsername }) {
     if (!id) { setSteamError('No Steam ID linked — set it in your profile settings'); return; }
     setSteamLoading(true); setSteamError('');
     try {
-      const res = await fetch(`/api/cs/steam/inventory/${id}`);
+      const res = await fetch(`/api/cs/steam/inventory/${id}`, { headers: authHeaders() });
       const data = await res.json();
       if (!res.ok) setSteamError(data.error || 'Failed to fetch inventory');
       else setSteamInventory(data);
@@ -161,7 +167,7 @@ export default function CSSkins({ isDark, authUsername }) {
     if (!id) return;
     setModalInvLoading(true);
     try {
-      const res = await fetch(`/api/cs/steam/inventory/${id}`);
+      const res = await fetch(`/api/cs/steam/inventory/${id}`, { headers: authHeaders() });
       const data = await res.json();
       if (res.ok) setModalInventory(data.items || []);
     } catch(e) {}
@@ -192,7 +198,7 @@ export default function CSSkins({ isDark, authUsername }) {
   const searchSkins = async (q) => {
     if (q.length < 2) { setSkinSearchResults([]); return; }
     try {
-      const res = await fetch(`/api/cs/prices/search/${encodeURIComponent(q)}`);
+      const res = await fetch(`/api/cs/prices/search/${encodeURIComponent(q)}`, { headers: authHeaders() });
       setSkinSearchResults(await res.json());
     } catch(e) {}
   };
@@ -203,7 +209,7 @@ export default function CSSkins({ isDark, authUsername }) {
     if (selectedModalItem) payload.steam_asset_id = selectedModalItem.assetId;
     await fetch('/api/cs/inventory', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(payload)
     });
     closeAddModal();
@@ -220,7 +226,7 @@ export default function CSSkins({ isDark, authUsername }) {
     if (!sellForm.sale_price || !sellForm.sale_date) return;
     await fetch(`/api/cs/inventory/${id}/sell`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(sellForm)
     });
     setShowSellForm(null);
@@ -234,7 +240,7 @@ export default function CSSkins({ isDark, authUsername }) {
 
   const deleteItem = async (id) => {
     if (!confirm('Remove this trade from your registry?')) return;
-    await fetch(`/api/cs/inventory/${id}`, { method: 'DELETE' });
+    await fetch(`/api/cs/inventory/${id}`, { method: 'DELETE', headers: authHeaders() });
     await fetchAll();
   };
 
@@ -273,7 +279,7 @@ export default function CSSkins({ isDark, authUsername }) {
     if (!editForm.skin_name || !editForm.purchase_price || !editForm.purchase_date) return;
     await fetch(`/api/cs/inventory/${showEditForm.id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify(editForm),
     });
     closeEditModal();
