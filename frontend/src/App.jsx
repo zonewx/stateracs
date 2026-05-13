@@ -130,7 +130,7 @@ export default function App() {
   // ── Auth Logic ─────────────────────────────────────────────────────────────
   useEffect(() => {
     fetch('/api/auth/status').then(r => r.json()).then(d => {
-      setAllowRegistration(d.allowRegistration !== false);
+      setAllowRegistration(d.allowRegistration !== false && !d.reachedLimit);
       if (!d.hasUsers) { setAuthStatus('no-user'); setAuthMode('signup'); }
       else {
         const saved = sessionStorage.getItem('auth_user');

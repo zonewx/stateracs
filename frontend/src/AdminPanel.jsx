@@ -12,7 +12,8 @@ export default function AdminPanel({ isDark, authUsername }) {
   const [resetModal, setResetModal] = useState(null); // { username }
   const [resetPw, setResetPw] = useState('');
   const [annForm, setAnnForm] = useState({ title: '', message: '', type: 'info' });
-  const [settings, setSettings] = useState({ allowRegistration: true });
+  const [settings, setSettings] = useState({ allowRegistration: true, userLimit: 0 });
+  const [userLimitInput, setUserLimitInput] = useState('0');
 
   const token = sessionStorage.getItem('auth_token');
   const h = { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) };
@@ -37,7 +38,11 @@ export default function AdminPanel({ isDark, authUsername }) {
       if (statsRes.error) { flash('Stats error: ' + statsRes.error); }
       else { setStats(statsRes); }
       if (Array.isArray(annRes)) setAnnouncements(annRes);
-      if (settingsRes && !settingsRes.error) setSettings({ allowRegistration: settingsRes.allowRegistration !== 'false' });
+      if (settingsRes && !settingsRes.error) {
+        const limit = parseInt(settingsRes.userLimit || '0', 10);
+        setSettings({ allowRegistration: settingsRes.allowRegistration !== 'false', userLimit: limit });
+        setUserLimitInput(String(limit));
+      }
     } catch(e) { flash('Failed to load stats: ' + e.message); }
     setLoading(false);
   }, []);
@@ -121,6 +126,14 @@ export default function AdminPanel({ isDark, authUsername }) {
     setSettings(s => ({ ...s, allowRegistration: newVal }));
     await fetch('/api/admin/settings', { method: 'POST', headers: h, body: JSON.stringify({ key: 'allowRegistration', value: String(newVal) }) });
     flash(`✓ Registration ${newVal ? 'enabled' : 'disabled'}`);
+  };
+
+  const saveUserLimit = async () => {
+    const limit = Math.max(0, parseInt(userLimitInput, 10) || 0);
+    setUserLimitInput(String(limit));
+    setSettings(s => ({ ...s, userLimit: limit }));
+    await fetch('/api/admin/settings', { method: 'POST', headers: h, body: JSON.stringify({ key: 'userLimit', value: String(limit) }) });
+    flash(`✓ User limit set to ${limit === 0 ? 'unlimited' : limit}`);
   };
 
   const setRole = async (username, role) => {
@@ -220,16 +233,33 @@ export default function AdminPanel({ isDark, authUsername }) {
                 {/* Registration toggle */}
                 <div className={`${card} p-5`}>
                   <h2 className={`text-xs font-bold uppercase tracking-wider mb-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Registration</h2>
-                  <div className={`flex items-center justify-between gap-4 p-4 rounded-xl ${isDark ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
-                    <div>
-                      <p className="text-sm font-semibold">Allow new registrations</p>
-                      <p className={`text-xs mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>When disabled, the sign up form is hidden and new accounts cannot be created.</p>
+                  <div className="flex flex-col gap-3">
+                    <div className={`flex items-center justify-between gap-4 p-4 rounded-xl ${isDark ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+                      <div>
+                        <p className="text-sm font-semibold">Allow new registrations</p>
+                        <p className={`text-xs mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>When disabled, the sign up form is hidden and new accounts cannot be created.</p>
+                      </div>
+                      <button type="button" onClick={toggleRegistration}
+                        className={`relative inline-flex items-center h-6 rounded-full transition-colors shrink-0 ${settings.allowRegistration ? 'bg-blue-600' : isDark ? 'bg-gray-600' : 'bg-gray-300'}`}
+                        style={{ width: '44px' }}>
+                        <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-200 ${settings.allowRegistration ? 'translate-x-5' : 'translate-x-0'}`}/>
+                      </button>
                     </div>
-                    <button type="button" onClick={toggleRegistration}
-                      className={`relative inline-flex items-center h-6 rounded-full transition-colors shrink-0 ${settings.allowRegistration ? 'bg-blue-600' : isDark ? 'bg-gray-600' : 'bg-gray-300'}`}
-                      style={{ width: '44px' }}>
-                      <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transition-transform duration-200 ${settings.allowRegistration ? 'translate-x-5' : 'translate-x-0'}`}/>
-                    </button>
+                    <div className={`flex items-center justify-between gap-4 p-4 rounded-xl ${isDark ? 'bg-gray-700/50' : 'bg-gray-50'}`}>
+                      <div>
+                        <p className="text-sm font-semibold">User limit</p>
+                        <p className={`text-xs mt-0.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Maximum number of accounts. Set to 0 for unlimited.</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <input
+                          type="number" min="0" value={userLimitInput}
+                          onChange={e => setUserLimitInput(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && saveUserLimit()}
+                          className={`w-20 px-2 py-1.5 rounded-lg border text-sm text-center outline-none ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-white border-gray-300 text-gray-900'}`}
+                        />
+                        <button onClick={saveUserLimit} className={btnBlue}>Save</button>
+                      </div>
+                    </div>
                   </div>
                 </div>
 

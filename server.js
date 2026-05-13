@@ -7,6 +7,7 @@ const { supabase } = require('./supabase');
 
 // Simple in-memory rate limiter for auth routes
 const rateLimitMap = new Map();
+setInterval(() => { const now = Date.now(); for (const [k, v] of rateLimitMap) if (now > v.resetAt) rateLimitMap.delete(k); }, 5 * 60 * 1000).unref();
 function rateLimit(maxRequests, windowMs) {
   return (req, res, next) => {
     const key = req.ip || req.connection.remoteAddress;
@@ -24,6 +25,7 @@ function rateLimit(maxRequests, windowMs) {
 const authRateLimit = rateLimit(10, 60 * 1000); // 10 attempts per minute
 
 const app = express();
+app.set('trust proxy', 1);
 app.use(express.json({ limit: '20mb' }));
 
 // ── Structured logging ──────────────────────────────────────────────────────
@@ -91,10 +93,16 @@ async function requireAdmin(req, res, next) {
 
 // ── Auth routes ─────────────────────────────────────────────────────────────
 app.get('/api/auth/status', async (req, res) => {
-  const { count } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
-  const { data: setting } = await supabase.from('app_settings').select('value').eq('key', 'allowRegistration').single();
-  const allowRegistration = setting ? setting.value === 'true' : true;
-  res.json({ hasUsers: (count || 0) > 0, allowRegistration });
+  const [{ count }, { data: settings }] = await Promise.all([
+    supabase.from('profiles').select('*', { count: 'exact', head: true }),
+    supabase.from('app_settings').select('key, value'),
+  ]);
+  const s = {};
+  (settings || []).forEach(r => { s[r.key] = r.value; });
+  const allowRegistration = s.allowRegistration !== 'false';
+  const userLimit = parseInt(s.userLimit || '0', 10);
+  const reachedLimit = userLimit > 0 && (count || 0) >= userLimit;
+  res.json({ hasUsers: (count || 0) > 0, allowRegistration, userLimit, reachedLimit });
 });
 
 app.post('/api/auth/register', authRateLimit, async (req, res) => {
@@ -106,8 +114,12 @@ app.post('/api/auth/register', authRateLimit, async (req, res) => {
   if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters.' });
   const { data: existing } = await supabase.from('profiles').select('id').eq('username', username.trim()).single();
   if (existing) return res.status(400).json({ error: 'Username already taken.' });
-  const { count } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
-  if (count >= 10) return res.status(400).json({ error: 'Maximum 10 users reached.' });
+  const [{ count }, { data: limitSetting }] = await Promise.all([
+    supabase.from('profiles').select('*', { count: 'exact', head: true }),
+    supabase.from('app_settings').select('value').eq('key', 'userLimit').single(),
+  ]);
+  const userLimit = parseInt(limitSetting?.value || '0', 10);
+  if (userLimit > 0 && count >= userLimit) return res.status(400).json({ error: `User limit of ${userLimit} reached.` });
   const email = `${username.trim().toLowerCase()}@statera.local`;
   const { data: authData, error: authError } = await supabase.auth.admin.createUser({ email, password, email_confirm: true });
   if (authError) return res.status(400).json({ error: authError.message });
@@ -165,7 +177,7 @@ app.put('/api/users/:username/profile', requireUser, async (req, res) => {
   if (req.username !== req.params.username) return res.status(403).json({ error: "Cannot edit another user's profile." });
   const { bio, steamId, publicInventory, publicHoldings, publicDividends, showPortfolioValue, avatarBase64, showcaseItems, country } = req.body;
   const update = {};
-  if (bio !== undefined) update.bio = bio;
+  if (bio !== undefined) { if (typeof bio === 'string' && bio.length > 500) return res.status(400).json({ error: 'Bio must be 500 characters or fewer.' }); update.bio = bio; }
   if (country !== undefined) update.country = country;
   if (steamId !== undefined) { update.steam_id = steamId; if (steamId !== (await supabase.from('profiles').select('steam_id').eq('id', req.user.id).single()).data?.steam_id) update.steam_verified = false; }
   if (publicInventory !== undefined) update.public_inventory = publicInventory;
@@ -173,7 +185,7 @@ app.put('/api/users/:username/profile', requireUser, async (req, res) => {
   if (publicDividends !== undefined) update.public_dividends = publicDividends;
   if (showPortfolioValue !== undefined) update.show_portfolio_value = showPortfolioValue;
   if (avatarBase64 !== undefined) {
-    if (avatarBase64 && avatarBase64.length > 1.5 * 1024 * 1024) return res.status(400).json({ error: 'Avatar too large. Maximum 1 MB.' });
+    if (avatarBase64 && avatarBase64.length > 1.5 * 1024 * 1024) return res.status(400).json({ error: 'Avatar too large. Maximum 1.5 MB.' });
     update.avatar_base64 = avatarBase64;
   }
   if (showcaseItems !== undefined) {
@@ -969,7 +981,7 @@ app.get('/api/activity/mine', requireUser, async (req, res) => {
 });
 
 // Get a specific user's public activity
-app.get('/api/users/:username/activity', async (req, res) => {
+app.get('/api/users/:username/activity', requireUser, async (req, res) => {
   const { data: profile } = await supabase.from('profiles').select('id, username').eq('username', req.params.username).single();
   if (!profile) return res.status(404).json({ error: 'User not found' });
   const { data: activities } = await supabase.from('activity').select('*').eq('user_id', profile.id).order('created_at', { ascending:false }).limit(10);
@@ -979,7 +991,7 @@ app.get('/api/users/:username/activity', async (req, res) => {
 app.post('/api/activity/screenshot', requireUser, async (req, res) => {
   const { skinName, caption, imageBase64 } = req.body;
   if (!skinName) return res.status(400).json({ error: 'Skin name required.' });
-  if (imageBase64 && imageBase64.length > 1.5 * 1024 * 1024) return res.status(400).json({ error: 'Image too large. Maximum 1 MB.' });
+  if (imageBase64 && imageBase64.length > 1.5 * 1024 * 1024) return res.status(400).json({ error: 'Image too large. Maximum 1.5 MB.' });
   await appendActivity(req.user.id, 'skin_screenshot', { skinName: skinName||'Unknown skin', caption: caption||'', imageBase64: imageBase64||null });
   res.json({ success:true });
 });
@@ -1016,7 +1028,7 @@ app.post('/api/cs/settings', requireUser, async (req, res) => {
   res.json({ success:true });
 });
 
-app.post('/api/cs/prices/sync', requireUser, async (req, res) => {
+app.post('/api/cs/prices/sync', requireAdmin, async (req, res) => {
   try {
     let prices = null;
     try { const d = await fetchJSON('https://prices.csgotrader.app/latest/prices_v6.json'); if (d && typeof d === 'object' && !d.error) prices = d; } catch(e) {}
@@ -1112,14 +1124,16 @@ app.delete('/api/cs/inventory/:id', requireUser, async (req, res) => {
 app.post('/api/cs/inventory/:id/sell', requireUser, async (req, res) => {
   const { sale_price, sale_currency, sale_date, notes, screenshot_url } = req.body;
   if (!sale_price||!sale_date) return res.status(400).json({ error:'sale_price and sale_date required' });
-  const { data: item } = await supabase.from('cs_inventory').select('skin_name, purchase_price').eq('id', req.params.id).single();
+  const { data: item } = await supabase.from('cs_inventory').select('skin_name, purchase_price, sold').eq('id', req.params.id).eq('user_id', req.user.id).single();
+  if (!item) return res.status(404).json({ error: 'Item not found.' });
+  if (item.sold) return res.status(409).json({ error: 'Item already marked as sold.' });
   await supabase.from('cs_inventory').update({ sold:true }).eq('id', req.params.id).eq('user_id', req.user.id);
   const { data } = await supabase.from('cs_sales').insert({ inventory_id:req.params.id, user_id:req.user.id, sale_price, sale_currency:sale_currency||'SEK', sale_date, notes, screenshot_url:screenshot_url||null }).select().single();
-  if (item) await appendActivity(req.user.id, 'cs_trade', { action:'sell', skinName:item.skin_name, buyPrice:item.purchase_price, sellPrice:sale_price, currency:sale_currency });
+  await appendActivity(req.user.id, 'cs_trade', { action:'sell', skinName:item.skin_name, buyPrice:item.purchase_price, sellPrice:sale_price, currency:sale_currency });
   res.json({ id:data?.id, success:true });
 });
 
-app.get('/api/cs/steam/screenshot/:id', async (req, res) => {
+app.get('/api/cs/steam/screenshot/:id', requireUser, async (req, res) => {
   const { id } = req.params;
   if (!/^\d+$/.test(id)) return res.status(400).json({ error: 'Invalid screenshot ID' });
   try {
@@ -1292,6 +1306,7 @@ const BASE_URL = process.env.BASE_URL || (process.env.NODE_ENV === 'production' 
 
 // Short-lived opaque state tokens: code → { userId, expiresAt }
 const steamLinkTokens = new Map();
+setInterval(() => { const now = Date.now(); for (const [k, v] of steamLinkTokens) if (now > v.expiresAt) steamLinkTokens.delete(k); }, 60 * 1000).unref();
 
 // Step 1: Redirect user to Steam login
 app.get('/api/steam/auth', requireUser, (req, res) => {
