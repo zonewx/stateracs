@@ -441,9 +441,8 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
   );
 
   return (
-    <div className={`flex flex-col h-screen ${isDark ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-900'}`}>
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-6xl mx-auto px-8 py-8">
+    <div className={`flex flex-col flex-1 overflow-y-auto ${isDark ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-900'}`}>
+      <div className="max-w-6xl mx-auto px-8 py-8 w-full">
 
           {/* OVERVIEW */}
           {tab === 'overview' && (
@@ -491,12 +490,11 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
                         <div><p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} mb-1`}>Tradable items</p><p className="text-xl font-bold">{steamInventory.items.filter(i=>i.tradable).length}</p></div>
                         <div><p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} mb-1`}>Est. Value</p><p className="text-xl font-bold text-green-400">{fmtSEK(steamInventory.items.filter(i=>i.tradable).reduce((s,i)=>s+i.priceSEK,0))}</p></div>
                       </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2 max-h-80 overflow-y-auto">
-                        {steamInventory.items.filter(i=>i.tradable).slice(0, 24).map((item, i) => (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
+                        {steamInventory.items.filter(i=>i.tradable).map((item, i) => (
                           <SkinCard key={i} item={item} isDark={isDark} />
                         ))}
                       </div>
-                      {steamInventory.items.filter(i=>i.tradable).length > 24 && <p className={`text-xs mt-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>+{steamInventory.items.filter(i=>i.tradable).length - 24} more items</p>}
                     </div>
                   )}
                   {!steamInventory && !steamLoading && !steamError && (
@@ -1198,7 +1196,6 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
           )}
 
         </div>
-      </div>
     </div>
   );
 }

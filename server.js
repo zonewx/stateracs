@@ -1057,20 +1057,10 @@ app.post('/api/cs/prices/sync', requireUser, async (req, res) => {
 
   setImmediate(async () => {
     try {
-      const r = await fetch('https://api.skinport.com/v1/items?app_id=730&currency=SEK', {
-        headers: { 'Accept-Encoding': 'br' },
-      });
+      const r = await fetch('https://api.skinport.com/v1/items?app_id=730&currency=SEK');
       if (!r.ok) { log.error('cs prices sync: skinport error', { status: r.status }); return; }
 
-      let items;
-      const enc = r.headers.get('content-encoding');
-      if (enc === 'br') {
-        const buf = Buffer.from(await r.arrayBuffer());
-        const decompressed = await brotliDecompress(buf);
-        items = JSON.parse(decompressed.toString());
-      } else {
-        items = await r.json();
-      }
+      const items = await r.json();
       if (!Array.isArray(items)) { log.error('cs prices sync: unexpected skinport response'); return; }
 
       let sekPerUsd = 10.5;
