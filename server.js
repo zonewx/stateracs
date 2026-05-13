@@ -1052,50 +1052,56 @@ app.post('/api/cs/settings', requireUser, async (req, res) => {
 });
 
 app.post('/api/cs/prices/sync', requireUser, async (req, res) => {
-  try {
-    const r = await fetch('https://api.skinport.com/v1/items?app_id=730&currency=SEK', {
-      headers: { 'Accept-Encoding': 'br' },
-    });
-    if (!r.ok) return res.status(500).json({ error: `Skinport returned ${r.status}` });
-    // Decompress Brotli manually — Node.js fetch doesn't always auto-decompress br
-    let items;
-    const enc = r.headers.get('content-encoding');
-    if (enc === 'br') {
-      const buf = Buffer.from(await r.arrayBuffer());
-      const decompressed = await brotliDecompress(buf);
-      items = JSON.parse(decompressed.toString());
-    } else {
-      items = await r.json();
-    }
-    if (!Array.isArray(items)) return res.status(500).json({ error: 'Unexpected response from Skinport' });
+  // Respond immediately — upserts run in background to avoid Vercel's 10s proxy timeout
+  res.json({ success: true, count: 0, source: 'skinport', syncing: true });
 
-    // Single exchange rate call to get USD equivalent
-    let sekPerUsd = 10.5;
+  setImmediate(async () => {
     try {
-      const fx = await fetch('https://api.frankfurter.app/latest?from=USD&to=SEK');
-      const fxData = await fx.json();
-      sekPerUsd = fxData?.rates?.SEK || sekPerUsd;
-    } catch(e) {}
+      const r = await fetch('https://api.skinport.com/v1/items?app_id=730&currency=SEK', {
+        headers: { 'Accept-Encoding': 'br' },
+      });
+      if (!r.ok) { log.error('cs prices sync: skinport error', { status: r.status }); return; }
 
-    const now = new Date().toISOString();
-    const entries = items
-      .filter(i => i.market_hash_name)
-      .map(i => ({
-        skin_name: i.market_hash_name,
-        price_sek: i.median_price || i.suggested_price || i.min_price || 0,
-        price_usd: parseFloat(((i.median_price || i.suggested_price || i.min_price || 0) / sekPerUsd).toFixed(2)),
-        last_updated: now,
-      }));
+      let items;
+      const enc = r.headers.get('content-encoding');
+      if (enc === 'br') {
+        const buf = Buffer.from(await r.arrayBuffer());
+        const decompressed = await brotliDecompress(buf);
+        items = JSON.parse(decompressed.toString());
+      } else {
+        items = await r.json();
+      }
+      if (!Array.isArray(items)) { log.error('cs prices sync: unexpected skinport response'); return; }
 
-    for (let i = 0; i < entries.length; i += 500) {
-      await supabase.from('cs_price_cache').upsert(entries.slice(i, i + 500), { onConflict: 'skin_name' });
+      let sekPerUsd = 10.5;
+      try {
+        const fx = await fetch('https://api.frankfurter.app/latest?from=USD&to=SEK');
+        const fxData = await fx.json();
+        sekPerUsd = fxData?.rates?.SEK || sekPerUsd;
+      } catch(e) {}
+
+      const now = new Date().toISOString();
+      const entries = items
+        .filter(i => i.market_hash_name)
+        .map(i => ({
+          skin_name: i.market_hash_name,
+          price_sek: i.median_price || i.suggested_price || i.min_price || 0,
+          price_usd: parseFloat(((i.median_price || i.suggested_price || i.min_price || 0) / sekPerUsd).toFixed(2)),
+          last_updated: now,
+        }));
+
+      const CHUNK = 500;
+      await Promise.all(
+        Array.from({ length: Math.ceil(entries.length / CHUNK) }, (_, i) =>
+          supabase.from('cs_price_cache').upsert(entries.slice(i * CHUNK, (i + 1) * CHUNK), { onConflict: 'skin_name' })
+        )
+      );
+
+      log.info('cs prices sync completed', { count: entries.length, sekRate: sekPerUsd });
+    } catch(e) {
+      log.error('cs prices sync failed', { error: e.message });
     }
-
-    res.json({ success: true, count: entries.length, sekRate: sekPerUsd, source: 'skinport' });
-  } catch(e) {
-    log.error('cs prices sync failed', { error: e.message });
-    res.status(500).json({ error: e.message });
-  }
+  });
 });
 
 app.get('/api/cs/prices/search/:query', requireUser, async (req, res) => {

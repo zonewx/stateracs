@@ -208,17 +208,28 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
 
   const syncPrices = async () => {
     setSyncingPrices(true);
-    setSyncStatus('Downloading CS item prices (~30 sec)...');
+    setSyncStatus('Starting sync...');
     try {
       const res = await fetch('/api/cs/prices/sync', { method: 'POST', headers: authHeaders() });
       const data = await res.json();
-      if (data.success) {
-        setSyncStatus(`✓ Synced ${data.count.toLocaleString()} items via ${data.source}`);
-        setPricesReady(true);
-        await fetchAll();
-      } else setSyncStatus('Failed: ' + data.error);
-    } catch(e) { setSyncStatus('Error: ' + e.message); }
-    setSyncingPrices(false);
+      if (!data.success) { setSyncStatus('Failed: ' + data.error); setSyncingPrices(false); return; }
+
+      // Server responds immediately; actual upserts run in background (~30s)
+      let secs = 35;
+      setSyncStatus(`Syncing in background — refreshing in ${secs}s...`);
+      const tick = setInterval(() => {
+        secs--;
+        if (secs > 0) {
+          setSyncStatus(`Syncing in background — refreshing in ${secs}s...`);
+        } else {
+          clearInterval(tick);
+          setSyncingPrices(false);
+          setPricesReady(true);
+          setSyncStatus('✓ Sync complete — prices updated');
+          fetchAll();
+        }
+      }, 1000);
+    } catch(e) { setSyncStatus('Error: ' + e.message); setSyncingPrices(false); }
   };
 
   const INVENTORY_CACHE_TTL = 10 * 60 * 1000;
