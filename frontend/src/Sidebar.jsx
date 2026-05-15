@@ -419,7 +419,7 @@ export default function Sidebar({ currentUser, onLogout, isDark, selectedBroker,
                               onClick={() => toggleSection(subItem.id)}
                               className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors ${hoverBg} ${subItem.isDanger ? 'text-red-400' : textSecondary}`}
                             >
-                              <span className="text-xs flex-1 text-left">{subItem.label}</span>
+                              <span className="text-sm flex-1 text-left">{subItem.label}</span>
                               <ChevronLeft size={12} className={`transition-transform duration-200 ${isActionOpen ? '-rotate-90' : 'rotate-180'}`} />
                             </button>
                             {isActionOpen && (
@@ -439,7 +439,7 @@ export default function Sidebar({ currentUser, onLogout, isDark, selectedBroker,
                             isActive(subItem.path) ? activeBg : hoverBg
                           } ${textPrimary}`}
                         >
-                          <span className="text-xs">{subItem.label}</span>
+                          <span className="text-sm">{subItem.label}</span>
                         </button>
                       );
                     })}

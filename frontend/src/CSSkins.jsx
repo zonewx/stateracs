@@ -149,8 +149,8 @@ function SkinCard({ item, isDark, onClick, onSetPrice, onClearPrice }) {
               )}
             </div>
           ) : (
-            <button onClick={startEdit} className={`text-xs font-medium ${isDark ? 'text-gray-500 hover:text-gray-300' : 'text-gray-400 hover:text-gray-600'} transition`}>
-              — <span className="text-[10px]">set price</span>
+            <button onClick={startEdit} className={`text-[10px] font-semibold px-2 py-0.5 rounded border transition ${isDark ? 'border-gray-600 text-gray-400 hover:border-gray-400 hover:text-gray-200' : 'border-gray-300 text-gray-500 hover:border-gray-500 hover:text-gray-700'}`}>
+              Set price
             </button>
           )}
           {!item.tradable && !editing && <span className="text-[10px] text-yellow-500 font-medium">Not tradable</span>}
