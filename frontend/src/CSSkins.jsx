@@ -217,7 +217,10 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
   const pricingRetries = useRef(0);
   useEffect(() => {
     if (!steamInventory?.pricingPending) { pricingRetries.current = 0; return; }
-    if (pricingRetries.current >= 5) return; // give up after 5 attempts (~2 min total)
+    if (pricingRetries.current >= 5) {
+      setSteamInventory(prev => prev ? { ...prev, pricingPending: false } : prev);
+      return;
+    }
     const t = setTimeout(() => { pricingRetries.current++; fetchSteamInventory(true); }, 20000);
     return () => clearTimeout(t);
   }, [steamInventory]);
@@ -433,20 +436,6 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
           {/* OVERVIEW */}
           {tab === 'overview' && (
             <div className="flex flex-col gap-6">
-              {!pricesReady && (
-                <div className={`${card} p-5 border-orange-600/40`}>
-                  <div className="flex items-start gap-4">
-                    <div className="text-2xl">⚡</div>
-                    <div>
-                      <p className="font-semibold mb-1">Prices not yet synced</p>
-                      <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                        Prices sync automatically every 24 hours. You can trigger a manual sync from{' '}
-                        <button onClick={() => navigate('/settings')} className="text-orange-400 hover:underline">Settings</button>.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
 
               {pnl && (
                 <>

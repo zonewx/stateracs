@@ -1136,7 +1136,6 @@ app.get('/api/cs/steam/inventory/:steamId', requireUser, async (req, res) => {
     const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
     const allMissing = uniqueNames.filter(n =>
       !priceMap[n] ||
-      priceMap[n].price_sek === 0 ||
       new Date(priceMap[n].last_updated).getTime() < sevenDaysAgo
     );
 
@@ -1195,7 +1194,7 @@ app.get('/api/cs/steam/inventory/:steamId', requireUser, async (req, res) => {
 
       await new Promise(r => setTimeout(r, 300));
 
-      // 3. listings/render — lowest current ask (last resort)
+      // 3. listings/render — lowest current ask
       try {
         const r = await fetch(
           `https://steamcommunity.com/market/listings/730/${encoded}/render/?start=0&count=1&currency=1&language=english&format=json`,
@@ -1206,6 +1205,48 @@ app.get('/api/cs/steam/inventory/:steamId', requireUser, async (req, res) => {
           if (d?.success && d.listinginfo) {
             const listing = Object.values(d.listinginfo)[0];
             if (listing) { const usd = (listing.converted_price + listing.converted_fee) / 100; if (usd > 0) return usd; }
+          }
+        }
+      } catch(e) {}
+
+      await new Promise(r => setTimeout(r, 300));
+
+      // 4. HTML listing page — extract var line1 graph data (last recorded sale price).
+      // Steam embeds historical sale prices as inline JS on the public listing page,
+      // accessible without auth. Used when no active listings exist but sales have occurred.
+      try {
+        const r = await fetch(
+          `https://steamcommunity.com/market/listings/730/${encoded}`,
+          { headers: { 'User-Agent': UA } }
+        );
+        if (r.ok) {
+          const html = await r.text();
+          const match = html.match(/var line1\s*=\s*(\[[\s\S]*?\]);/);
+          if (match) {
+            const data = JSON.parse(match[1]);
+            if (Array.isArray(data) && data.length > 0) {
+              const price = parseFloat(data[data.length - 1][1]);
+              if (price > 0) return price;
+            }
+          }
+        }
+      } catch(e) {}
+
+      await new Promise(r => setTimeout(r, 300));
+
+      // 5. CSFloat marketplace — lowest current ask, no API key required.
+      // Covers items above Steam's ~$1,800 price cap (Dragon Lore, Howl, etc.)
+      // where all Steam Market endpoints return nothing.
+      try {
+        const r = await fetch(
+          `https://csfloat.com/api/v1/listings?market_hash_name=${encoded}&limit=1&sort_by=price&order=asc`,
+          { headers: { 'User-Agent': UA } }
+        );
+        if (r.ok) {
+          let d; try { d = JSON.parse(await r.text()); } catch(e) {}
+          if (Array.isArray(d?.data) && d.data.length > 0) {
+            const usd = d.data[0].price / 100;
+            if (usd > 0) return usd;
           }
         }
       } catch(e) {}
@@ -1228,12 +1269,21 @@ app.get('/api/cs/steam/inventory/:steamId', requireUser, async (req, res) => {
 
     if (syncBatch.length > 0) {
       const syncEntries = [];
+      const syncFailed = [];
       for (const name of syncBatch) {
         const usd = await steamPrice(name);
         if (usd) { const sek = parseFloat((usd * usdToSek).toFixed(2)); syncEntries.push({ name, usd, sek }); priceMap[name] = { price_sek: sek }; }
+        else { syncFailed.push(name); }
         await new Promise(r => setTimeout(r, 500));
       }
-      if (syncEntries.length > 0) setImmediate(() => cacheEntries(syncEntries));
+      const syncNow = new Date().toISOString();
+      setImmediate(async () => {
+        await cacheEntries(syncEntries);
+        if (syncFailed.length > 0) await supabase.from('cs_price_cache').upsert(
+          syncFailed.map(n => ({ skin_name: n, price_sek: 0, price_usd: 0, last_updated: syncNow })),
+          { onConflict: 'skin_name' }
+        );
+      });
     }
 
     const buildItems = () => (data.assets||[]).map(asset => {
@@ -1260,13 +1310,22 @@ app.get('/api/cs/steam/inventory/:steamId', requireUser, async (req, res) => {
         steamPriceLookupRunning = true;
         try {
           const bgEntries = [];
+          const bgFailed = [];
           for (const name of bgBatch) {
             const usd = await steamPrice(name);
             if (usd) bgEntries.push({ name, usd, sek: parseFloat((usd * usdToSek).toFixed(2)) });
+            else bgFailed.push(name);
             await new Promise(r => setTimeout(r, 700));
           }
           await cacheEntries(bgEntries);
           if (bgEntries.length > 0) log.info('steam bg price fallback cached', { count: bgEntries.length });
+          if (bgFailed.length > 0) {
+            const bgNow = new Date().toISOString();
+            await supabase.from('cs_price_cache').upsert(
+              bgFailed.map(n => ({ skin_name: n, price_sek: 0, price_usd: 0, last_updated: bgNow })),
+              { onConflict: 'skin_name' }
+            );
+          }
         } finally { steamPriceLookupRunning = false; }
       });
     }
