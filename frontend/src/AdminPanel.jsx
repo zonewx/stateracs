@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
+import apiCache from './apiCache';
 
 export default function AdminPanel({ isDark, authUsername }) {
   const [tab, setTab] = useState('overview');
-  const [stats, setStats] = useState(null);
+  const [stats, setStats] = useState(() => apiCache.get('/api/admin/stats'));
   const [failures, setFailures] = useState([]);
-  const [announcements, setAnnouncements] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [announcements, setAnnouncements] = useState(() => apiCache.get('/api/announcements') || []);
+  const [loading, setLoading] = useState(!apiCache.has('/api/admin/stats'));
   const [actionMsg, setActionMsg] = useState('');
 
   // Modals
@@ -26,7 +27,7 @@ export default function AdminPanel({ isDark, authUsername }) {
   const flash = (msg, ms = 3000) => { setActionMsg(msg); setTimeout(() => setActionMsg(''), ms); };
 
   const fetchStats = useCallback(async () => {
-    setLoading(true);
+    if (!apiCache.has('/api/admin/stats')) setLoading(true);
     try {
       const token = sessionStorage.getItem('auth_token');
       const headers = { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) };
@@ -36,8 +37,8 @@ export default function AdminPanel({ isDark, authUsername }) {
         fetch('/api/admin/settings', { headers }).then(r => r.json()),
       ]);
       if (statsRes.error) { flash('Stats error: ' + statsRes.error); }
-      else { setStats(statsRes); }
-      if (Array.isArray(annRes)) setAnnouncements(annRes);
+      else { apiCache.set('/api/admin/stats', statsRes); setStats(statsRes); }
+      if (Array.isArray(annRes)) { apiCache.set('/api/announcements', annRes); setAnnouncements(annRes); }
       if (settingsRes && !settingsRes.error) {
         const limit = parseInt(settingsRes.userLimit || '0', 10);
         setSettings({ allowRegistration: settingsRes.allowRegistration !== 'false', userLimit: limit });

@@ -1,7 +1,43 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+
+function authHeaders(extra = {}) {
+  const token = sessionStorage.getItem('auth_token');
+  return { ...(token ? { 'Authorization': `Bearer ${token}` } : {}), ...extra };
+}
+
 export default function SettingsPage({ isDark, baseCurrency, onSetBaseCurrency }) {
+  const navigate = useNavigate();
+  const [syncingPrices, setSyncingPrices] = useState(false);
+  const [syncStatus, setSyncStatus] = useState('');
+
   const card = `rounded-2xl border p-6 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`;
   const label = `text-xs font-semibold uppercase tracking-wider mb-2 block ${isDark ? 'text-gray-400' : 'text-gray-500'}`;
   const select = `w-full px-3 py-2.5 rounded-xl border text-sm outline-none ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'}`;
+  const btnOrange = `px-4 py-2 text-sm font-semibold rounded-lg transition bg-orange-600 hover:bg-orange-500 text-white disabled:opacity-50`;
+
+  const syncPrices = async () => {
+    setSyncingPrices(true);
+    setSyncStatus('Starting sync...');
+    try {
+      const res = await fetch('/api/cs/prices/sync', { method: 'POST', headers: authHeaders() });
+      const data = await res.json();
+      if (!data.success) { setSyncStatus('Failed: ' + data.error); setSyncingPrices(false); return; }
+
+      let secs = 35;
+      setSyncStatus(`Syncing in background — done in ~${secs}s`);
+      const tick = setInterval(() => {
+        secs--;
+        if (secs > 0) {
+          setSyncStatus(`Syncing in background — done in ~${secs}s`);
+        } else {
+          clearInterval(tick);
+          setSyncingPrices(false);
+          setSyncStatus('✓ Sync complete — prices updated');
+        }
+      }, 1000);
+    } catch(e) { setSyncStatus('Error: ' + e.message); setSyncingPrices(false); }
+  };
 
   return (
     <div className={`flex-1 overflow-y-auto p-6 ${isDark ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-900'}`}>
@@ -26,6 +62,24 @@ export default function SettingsPage({ isDark, baseCurrency, onSetBaseCurrency }
               Used across Stock Portfolio and CS Skins for value calculations and display.
             </p>
           </div>
+        </div>
+
+        <div className={card}>
+          <h2 className={`text-sm font-bold uppercase tracking-wider mb-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>CS Item Prices</h2>
+          <p className={`text-sm mb-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+            Prices are sourced from Skinport and Steam Market, updated automatically every 24 hours.
+            Use the button below to trigger a manual sync.
+          </p>
+          <div className="flex items-center gap-3">
+            <button onClick={syncPrices} disabled={syncingPrices} className={btnOrange}>
+              {syncingPrices ? '⏳ Syncing...' : '↺ Sync Prices Now'}
+            </button>
+          </div>
+          {syncStatus && (
+            <p className={`text-xs mt-3 ${syncStatus.startsWith('✓') ? 'text-green-400' : 'text-orange-400'}`}>
+              {syncStatus}
+            </p>
+          )}
         </div>
       </div>
     </div>

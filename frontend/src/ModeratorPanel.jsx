@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
+import apiCache from './apiCache';
 
 export default function ModeratorPanel({ isDark, authUsername, userRole }) {
   const [tab, setTab] = useState('users');
-  const [users, setUsers] = useState([]);
-  const [modLog, setModLog] = useState([]);
-  const [announcements, setAnnouncements] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [users, setUsers] = useState(() => apiCache.get('/api/users') || []);
+  const [modLog, setModLog] = useState(() => apiCache.get('/api/mod/log') || []);
+  const [announcements, setAnnouncements] = useState(() => apiCache.get('/api/announcements') || []);
+  const [loading, setLoading] = useState(!apiCache.has('/api/users'));
   const [actionMsg, setActionMsg] = useState('');
   const [resetModal, setResetModal] = useState(null);
   const [resetPw, setResetPw] = useState('');
@@ -21,14 +22,18 @@ export default function ModeratorPanel({ isDark, authUsername, userRole }) {
   const base = userRole === 'admin' ? '/api/admin' : '/api/mod';
 
   const fetchAll = useCallback(async () => {
-    setLoading(true);
+    if (!apiCache.has('/api/users')) setLoading(true);
     try {
       const [usersRes, logRes, annRes] = await Promise.all([
         fetch('/api/users', { headers: h }).then(r => r.json()),
         fetch('/api/mod/log', { headers: h }).then(r => r.json()),
         fetch('/api/announcements', { headers: h }).then(r => r.json()),
       ]);
-      setUsers(usersRes.filter(u => u.username !== authUsername));
+      const filtered = usersRes.filter(u => u.username !== authUsername);
+      apiCache.set('/api/users', filtered);
+      apiCache.set('/api/mod/log', logRes);
+      apiCache.set('/api/announcements', annRes);
+      setUsers(filtered);
       setModLog(logRes);
       setAnnouncements(annRes);
     } catch(e) {}

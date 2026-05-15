@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
+import apiCache from './apiCache';
 
 const EXTERIORS = ['Factory New', 'Minimal Wear', 'Field-Tested', 'Well-Worn', 'Battle-Scarred'];
 const CURRENCIES = ['SEK', 'USD', 'EUR'];
@@ -116,7 +117,7 @@ function SkinCard({ item, isDark, onClick }) {
         <div className="mt-auto pt-1.5 flex items-center justify-between gap-1">
           {item.priceSEK > 0
             ? <p className="text-sm font-bold text-green-400">{fmtSEK(item.priceSEK)}</p>
-            : <span />
+            : <p className={`text-sm font-bold ${isDark ? 'text-gray-600' : 'text-gray-300'}`}>—</p>
           }
           {!item.tradable && <span className="text-[10px] text-yellow-500 font-medium">Not tradable</span>}
         </div>
@@ -134,15 +135,13 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
     : 'overview';
   const setTab = (t) => navigate(t === 'overview' ? '/cs-skins' : `/cs-skins/${t}`);
 
-  const [settings, setSettings] = useState({});
+  const [settings, setSettings] = useState(() => apiCache.get('/api/cs/settings') || {});
   const [steamInventory, setSteamInventory] = useState(null);
   const [steamLoading, setSteamLoading] = useState(false);
   const [steamError, setSteamError] = useState('');
-  const [inventory, setInventory] = useState([]);
-  const [pnl, setPnl] = useState(null);
-  const [pricesReady, setPricesReady] = useState(false);
-  const [syncingPrices, setSyncingPrices] = useState(false);
-  const [syncStatus, setSyncStatus] = useState('');
+  const [inventory, setInventory] = useState(() => apiCache.get('/api/cs/inventory') || []);
+  const [pnl, setPnl] = useState(() => apiCache.get('/api/cs/pnl'));
+  const [pricesReady, setPricesReady] = useState(() => apiCache.has('/api/cs/prices-ready'));
   const [showAddForm, setShowAddForm] = useState(false);
   const [addModalTab, setAddModalTab] = useState('inventory');
   const [modalInventory, setModalInventory] = useState(null);
@@ -189,11 +188,16 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
         fetch('/api/cs/pnl', { headers: h }).then(r => r.json()),
         fetch('/api/cs/settings', { headers: h }).then(r => r.json()),
       ]);
+      apiCache.set('/api/cs/inventory', Array.isArray(inv) ? inv : []);
+      apiCache.set('/api/cs/pnl', p);
+      apiCache.set('/api/cs/settings', s);
       setInventory(Array.isArray(inv) ? inv : []);
       setPnl(p);
       setSettings(s);
       const priceCheck = await fetch('/api/cs/prices/search/AK-47', { headers: h }).then(r => r.json());
-      setPricesReady(Array.isArray(priceCheck) && priceCheck.length > 0);
+      const ready = Array.isArray(priceCheck) && priceCheck.length > 0;
+      if (ready) apiCache.set('/api/cs/prices-ready', true);
+      setPricesReady(ready);
     } catch(e) { console.error(e); }
   }, []);
 
@@ -205,36 +209,6 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
       fetchSteamInventory();
     }
   }, [tab, settings.steam_id]);
-
-  const syncPrices = async () => {
-    setSyncingPrices(true);
-    setSyncStatus('Starting sync...');
-    try {
-      const res = await fetch('/api/cs/prices/sync', { method: 'POST', headers: authHeaders() });
-      const data = await res.json();
-      if (!data.success) { setSyncStatus('Failed: ' + data.error); setSyncingPrices(false); return; }
-
-      // Server responds immediately; actual upserts run in background (~30s)
-      let secs = 35;
-      setSyncStatus(`Syncing in background — refreshing in ${secs}s...`);
-      const tick = setInterval(() => {
-        secs--;
-        if (secs > 0) {
-          setSyncStatus(`Syncing in background — refreshing in ${secs}s...`);
-        } else {
-          clearInterval(tick);
-          setSyncingPrices(false);
-          setPricesReady(true);
-          setSyncStatus('✓ Sync complete — prices updated');
-          // Clear Steam inventory cache so it reloads with fresh prices
-          sessionStorage.removeItem('steam_inv_cache');
-          setSteamInventory(null);
-          fetchAll();
-          if (settings.steam_id) fetchSteamInventory(true);
-        }
-      }, 1000);
-    } catch(e) { setSyncStatus('Error: ' + e.message); setSyncingPrices(false); }
-  };
 
   const INVENTORY_CACHE_TTL = 10 * 60 * 1000;
   const INVENTORY_CACHE_VERSION = 2; // bump when item shape changes
@@ -452,9 +426,11 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
                   <div className="flex items-start gap-4">
                     <div className="text-2xl">⚡</div>
                     <div>
-                      <p className="font-semibold mb-1">Sync CS item prices to get started</p>
-                      <p className={`text-sm mb-3 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Downloads current Steam Market prices for all CS items (~30 seconds). Only needed once — prices update daily.</p>
-                      <button onClick={syncPrices} disabled={syncingPrices} className={btnOrange}>{syncingPrices ? '⏳ Syncing...' : 'Sync Prices Now'}</button>
+                      <p className="font-semibold mb-1">Prices not yet synced</p>
+                      <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        Prices sync automatically every 24 hours. You can trigger a manual sync from{' '}
+                        <button onClick={() => navigate('/settings')} className="text-orange-400 hover:underline">Settings</button>.
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -1167,20 +1143,6 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
           {tab === 'settings' && (
             <div className="flex flex-col gap-4 max-w-lg">
               <h2 className="text-lg font-bold">CS Settings</h2>
-
-              <div className={`${card} p-5`}>
-                <h3 className="font-semibold mb-1">Price Database</h3>
-                <p className={`text-sm mb-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                  Prices are sourced from <strong>csgotrader.app</strong> — a free community price database updated daily with Steam Market prices.
-                </p>
-                <div className="flex items-center gap-3">
-                  <button onClick={syncPrices} disabled={syncingPrices} className={btnOrange}>
-                    {syncingPrices ? '⏳ Syncing...' : '↺ Sync Prices Now'}
-                  </button>
-                  {pricesReady && <span className="text-xs text-green-400">✓ Prices loaded</span>}
-                </div>
-                {syncStatus && <p className={`text-xs mt-2 ${syncStatus.startsWith('✓') ? 'text-green-400' : 'text-orange-400'}`}>{syncStatus}</p>}
-              </div>
 
               <div className={`${card} p-5`}>
                 <h3 className="font-semibold mb-1">Steam Account</h3>

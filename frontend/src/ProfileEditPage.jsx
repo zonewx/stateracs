@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import apiCache from './apiCache';
 
 const COUNTRIES = [
   { code: 'se', name: '🇸🇪 Sweden' }, { code: 'no', name: '🇳🇴 Norway' }, { code: 'dk', name: '🇩🇰 Denmark' },
@@ -73,30 +74,28 @@ export default function ProfileEditPage({ isDark, authUsername }) {
 
   async function fetchProfile() {
     try {
-      const res = await fetch(`/api/users/${authUsername}/profile`, { headers: h });
-      const data = await res.json();
+      const cached = apiCache.get(`/api/users/${authUsername}/profile`);
+      const data = cached || await fetch(`/api/users/${authUsername}/profile`, { headers: h }).then(r => r.json());
+      if (!cached) apiCache.set(`/api/users/${authUsername}/profile`, data);
       setProfile(data);
-      setEditForm({ 
-        bio: data.bio || '', 
-        steamId: data.steamId || '', 
-        publicInventory: data.publicInventory || false, 
-        publicHoldings: data.publicHoldings || false, 
+      setEditForm({
+        bio: data.bio || '',
+        steamId: data.steamId || '',
+        publicInventory: data.publicInventory || false,
+        publicHoldings: data.publicHoldings || false,
         publicDividends: data.publicDividends || false,
-        showPortfolioValue: data.showPortfolioValue || false, 
+        showPortfolioValue: data.showPortfolioValue || false,
         avatarBase64: data.avatarBase64 || null,
         showcaseItems: data.showcaseItems || [],
         country: data.country || 'se'
       });
       setSelectedShowcaseItems(data.showcaseItems || []);
       setSteamVerified(data.steamVerified || false);
-      
-      // Load inventory if Steam is linked
-      if (data.steamId) {
-        loadInventory(data.steamId);
-      }
-    } catch(e) {
-      console.error('Failed to fetch profile:', e);
-    }
+      if (data.steamId) loadInventory(data.steamId);
+      // Refresh in background if we served from cache
+      if (cached) fetch(`/api/users/${authUsername}/profile`, { headers: h }).then(r => r.json())
+        .then(d => { apiCache.set(`/api/users/${authUsername}/profile`, d); setProfile(d); }).catch(() => {});
+    } catch(e) {}
   }
 
   async function loadInventory(steamId) {

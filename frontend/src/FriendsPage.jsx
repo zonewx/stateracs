@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import apiCache from './apiCache';
 
 export default function FriendsPage({ isDark, authUsername }) {
-  const [friends, setFriends] = useState([]);
-  const [incoming, setIncoming] = useState([]);
-  const [outgoing, setOutgoing] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [friends, setFriends] = useState(() => apiCache.get('/api/friends')?.friends || []);
+  const [incoming, setIncoming] = useState(() => apiCache.get('/api/friends')?.incoming || []);
+  const [outgoing, setOutgoing] = useState(() => apiCache.get('/api/friends')?.outgoing || []);
+  const [loading, setLoading] = useState(!apiCache.has('/api/friends'));
   const [searchQuery, setSearchQuery] = useState('');
   const navigate = useNavigate();
 
@@ -14,18 +15,17 @@ export default function FriendsPage({ isDark, authUsername }) {
   useEffect(() => { loadFriends(); }, []);
 
   async function loadFriends() {
-    setLoading(true);
+    if (!apiCache.has('/api/friends')) setLoading(true);
     try {
       const res = await fetch('/api/friends', { headers: h });
       if (res.ok) {
         const data = await res.json();
+        apiCache.set('/api/friends', data);
         setFriends(Array.isArray(data.friends) ? data.friends : []);
         setIncoming(Array.isArray(data.incoming) ? data.incoming : []);
         setOutgoing(Array.isArray(data.outgoing) ? data.outgoing : []);
       }
-    } catch (e) {
-      console.error('Failed to load friends:', e);
-    }
+    } catch (e) {}
     setLoading(false);
   }
 

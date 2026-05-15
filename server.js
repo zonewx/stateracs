@@ -1051,48 +1051,53 @@ app.post('/api/cs/settings', requireUser, async (req, res) => {
   res.json({ success:true });
 });
 
+async function runPriceSync() {
+  try {
+    const r = await fetch('https://api.skinport.com/v1/items?app_id=730&currency=SEK');
+    if (!r.ok) { log.error('cs prices sync: skinport error', { status: r.status }); return; }
+
+    const items = await r.json();
+    if (!Array.isArray(items)) { log.error('cs prices sync: unexpected skinport response'); return; }
+
+    let sekPerUsd = 10.5;
+    try {
+      const fx = await fetch('https://api.frankfurter.app/latest?from=USD&to=SEK');
+      const fxData = await fx.json();
+      sekPerUsd = fxData?.rates?.SEK || sekPerUsd;
+    } catch(e) {}
+
+    const now = new Date().toISOString();
+    const entries = items
+      .filter(i => i.market_hash_name)
+      .filter(i => (i.suggested_price || i.min_price || 0) > 0)
+      .map(i => ({
+        skin_name: i.market_hash_name,
+        price_sek: i.suggested_price || i.min_price || 0,
+        price_usd: parseFloat(((i.suggested_price || i.min_price || 0) / sekPerUsd).toFixed(2)),
+        last_updated: now,
+      }));
+
+    const CHUNK = 500;
+    await Promise.all(
+      Array.from({ length: Math.ceil(entries.length / CHUNK) }, (_, i) =>
+        supabase.from('cs_price_cache').upsert(entries.slice(i * CHUNK, (i + 1) * CHUNK), { onConflict: 'skin_name' })
+      )
+    );
+
+    log.info('cs prices sync completed', { count: entries.length, sekRate: sekPerUsd });
+  } catch(e) {
+    log.error('cs prices sync failed', { error: e.message });
+  }
+}
+
+// Daily automatic price sync — runs 1 min after boot, then every 24 hours
+setTimeout(runPriceSync, 60 * 1000);
+setInterval(runPriceSync, 24 * 60 * 60 * 1000).unref();
+
 app.post('/api/cs/prices/sync', requireUser, async (req, res) => {
   // Respond immediately — upserts run in background to avoid Vercel's 10s proxy timeout
   res.json({ success: true, count: 0, source: 'skinport', syncing: true });
-
-  setImmediate(async () => {
-    try {
-      const r = await fetch('https://api.skinport.com/v1/items?app_id=730&currency=SEK');
-      if (!r.ok) { log.error('cs prices sync: skinport error', { status: r.status }); return; }
-
-      const items = await r.json();
-      if (!Array.isArray(items)) { log.error('cs prices sync: unexpected skinport response'); return; }
-
-      let sekPerUsd = 10.5;
-      try {
-        const fx = await fetch('https://api.frankfurter.app/latest?from=USD&to=SEK');
-        const fxData = await fx.json();
-        sekPerUsd = fxData?.rates?.SEK || sekPerUsd;
-      } catch(e) {}
-
-      const now = new Date().toISOString();
-      const entries = items
-        .filter(i => i.market_hash_name)
-        .filter(i => (i.suggested_price || i.min_price || 0) > 0) // skip items with no current listings
-        .map(i => ({
-          skin_name: i.market_hash_name,
-          price_sek: i.suggested_price || i.min_price || 0,
-          price_usd: parseFloat(((i.suggested_price || i.min_price || 0) / sekPerUsd).toFixed(2)),
-          last_updated: now,
-        }));
-
-      const CHUNK = 500;
-      await Promise.all(
-        Array.from({ length: Math.ceil(entries.length / CHUNK) }, (_, i) =>
-          supabase.from('cs_price_cache').upsert(entries.slice(i * CHUNK, (i + 1) * CHUNK), { onConflict: 'skin_name' })
-        )
-      );
-
-      log.info('cs prices sync completed', { count: entries.length, sekRate: sekPerUsd });
-    } catch(e) {
-      log.error('cs prices sync failed', { error: e.message });
-    }
-  });
+  setImmediate(runPriceSync);
 });
 
 app.get('/api/cs/prices/search/:query', requireUser, async (req, res) => {
@@ -1123,21 +1128,29 @@ app.get('/api/cs/steam/inventory/:steamId', requireUser, async (req, res) => {
         usdToSek = fxd?.rates?.SEK || usdToSek;
       } catch(e) {}
 
-      const steamResults = await Promise.all(missingNames.map(async name => {
+      // Sequential with 350ms delay — parallel requests trigger Steam rate limiting
+      const newEntries = [];
+      for (const name of missingNames) {
         try {
-          const r = await fetch(`https://steamcommunity.com/market/priceoverview/?appid=730&currency=1&market_hash_name=${encodeURIComponent(name)}`);
-          if (!r.ok) return null;
-          const d = await r.json();
-          if (!d.success) return null;
-          const raw = d.median_price || d.lowest_price;
-          if (!raw) return null;
-          const usd = parseFloat(raw.replace(/[^0-9.]/g, ''));
-          if (!(usd > 0)) return null;
-          return { name, usd, sek: parseFloat((usd * usdToSek).toFixed(2)) };
-        } catch(e) { return null; }
-      }));
-
-      const newEntries = steamResults.filter(Boolean);
+          const r = await fetch(
+            `https://steamcommunity.com/market/priceoverview/?appid=730&currency=1&market_hash_name=${encodeURIComponent(name)}`,
+            { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } }
+          );
+          if (r.ok) {
+            const text = await r.text();
+            let d;
+            try { d = JSON.parse(text); } catch(e) { /* HTML rate-limit page */ }
+            if (d?.success) {
+              const raw = d.median_price || d.lowest_price;
+              if (raw) {
+                const usd = parseFloat(raw.replace(/[^0-9.]/g, ''));
+                if (usd > 0) newEntries.push({ name, usd, sek: parseFloat((usd * usdToSek).toFixed(2)) });
+              }
+            }
+          }
+        } catch(e) {}
+        await new Promise(resolve => setTimeout(resolve, 350));
+      }
       if (newEntries.length > 0) {
         const now = new Date().toISOString();
         newEntries.forEach(e => { priceMap[e.name] = e.sek; });

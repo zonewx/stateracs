@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import apiCache from './apiCache';
 
 function SteamScreenshotPreview({ url, isDark }) {
   const [preview, setPreview] = useState(null);
@@ -172,14 +173,14 @@ function ActivityCard({ item, isDark, onDelete, isOwn }) {
 
 export default function SocialFeed({ isDark, authUsername, onViewProfile }) {
   const [tab, setTab] = useState('feed');
-  const [feed, setFeed] = useState([]);
-  const [friends, setFriends] = useState({ friends: [], incoming: [], outgoing: [] });
-  const [feedLoading, setFeedLoading] = useState(false);
+  const [feed, setFeed] = useState(() => apiCache.get('/api/feed') || []);
+  const [friends, setFriends] = useState(() => apiCache.get('/api/friends') || { friends: [], incoming: [], outgoing: [] });
+  const [feedLoading, setFeedLoading] = useState(!apiCache.has('/api/feed'));
   const [friendsLoading, setFriendsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [actionMsg, setActionMsg] = useState('');
-  const [announcements, setAnnouncements] = useState([]);
+  const [announcements, setAnnouncements] = useState(() => apiCache.get('/api/announcements') || []);
   // Screenshot upload
   const [showUpload, setShowUpload] = useState(false);
   const [uploadForm, setUploadForm] = useState({ skinName: '', caption: '', imageBase64: null });
@@ -194,22 +195,16 @@ export default function SocialFeed({ isDark, authUsername, onViewProfile }) {
   const flash = (msg, ms = 3000) => { setActionMsg(msg); setTimeout(() => setActionMsg(''), ms); };
 
   const fetchFeed = useCallback(async () => {
-    setFeedLoading(true);
+    if (!apiCache.has('/api/feed')) setFeedLoading(true);
     try {
       const token = sessionStorage.getItem('auth_token');
       const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
       const res = await fetch('/api/feed', { headers });
-      if (res.status === 401) {
-        window.dispatchEvent(new Event('session-expired'));
-        setFeedLoading(false);
-        return;
-      }
+      if (res.status === 401) { window.dispatchEvent(new Event('session-expired')); setFeedLoading(false); return; }
       if (!res.ok) { setFeedLoading(false); return; }
       const data = await res.json();
-      if (Array.isArray(data)) setFeed(data);
-    } catch(e) {
-      console.error('Feed fetch error:', e);
-    }
+      if (Array.isArray(data)) { apiCache.set('/api/feed', data); setFeed(data); }
+    } catch(e) { console.error('Feed fetch error:', e); }
     setFeedLoading(false);
   }, [authUsername]);
 
@@ -217,6 +212,7 @@ export default function SocialFeed({ isDark, authUsername, onViewProfile }) {
     setFriendsLoading(true);
     try {
       const data = await fetch('/api/friends', { headers: h }).then(r => r.json());
+      apiCache.set('/api/friends', data);
       setFriends(data);
     } catch(e) {}
     setFriendsLoading(false);
@@ -225,7 +221,9 @@ export default function SocialFeed({ isDark, authUsername, onViewProfile }) {
   useEffect(() => {
     fetchFeed();
     fetchFriends();
-    fetch('/api/announcements').then(r => r.json()).then(data => setAnnouncements(Array.isArray(data) ? data : [])).catch(() => {});
+    fetch('/api/announcements').then(r => r.json()).then(data => {
+      if (Array.isArray(data)) { apiCache.set('/api/announcements', data); setAnnouncements(data); }
+    }).catch(() => {});
   }, []);
 
   const searchUsers = async (q) => {

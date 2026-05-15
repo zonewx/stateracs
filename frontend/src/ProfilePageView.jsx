@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import apiCache from './apiCache';
 
 const ROLE_BADGE = {
   admin: { label: 'Admin', cls: 'bg-red-900/40 text-red-400 border border-red-800' },
@@ -77,12 +78,12 @@ export default function ProfilePageView({ isDark, authUsername, viewUsername = n
   const isOwnProfile = !viewUsername || viewUsername === authUsername;
   const targetUser = viewUsername || authUsername;
 
-  const [profile, setProfile] = useState(null);
+  const [profile, setProfile] = useState(() => apiCache.get(`/api/users/${targetUser}/profile`));
   const [showcaseItems, setShowcaseItems] = useState([]);
   const [viewingHoldings, setViewingHoldings] = useState(null);
   const [loadingHoldings, setLoadingHoldings] = useState(false);
   const [showAllHoldings, setShowAllHoldings] = useState(false);
-  const [userActivity, setUserActivity] = useState([]);
+  const [userActivity, setUserActivity] = useState(() => apiCache.get(`/api/users/${targetUser}/activity`) || []);
   const [loadingActivity, setLoadingActivity] = useState(false);
 
   const h = { 'Content-Type': 'application/json', ...(sessionStorage.getItem('auth_token') ? { 'Authorization': `Bearer ${sessionStorage.getItem('auth_token')}` } : {}) };
@@ -105,10 +106,9 @@ export default function ProfilePageView({ isDark, authUsername, viewUsername = n
     try {
       const res = await fetch(`/api/users/${targetUser}/profile`, { headers: h });
       const data = await res.json();
+      apiCache.set(`/api/users/${targetUser}/profile`, data);
       setProfile(data);
-    } catch(e) {
-      console.error('Failed to fetch profile:', e);
-    }
+    } catch(e) {}
   }
 
   async function loadShowcaseItems() {
@@ -206,11 +206,12 @@ export default function ProfilePageView({ isDark, authUsername, viewUsername = n
   }
 
   async function loadUserActivity() {
-    setLoadingActivity(true);
+    if (!apiCache.has(`/api/users/${targetUser}/activity`)) setLoadingActivity(true);
     try {
       const res = await fetch(`/api/users/${targetUser}/activity`, { headers: h });
       if (res.ok) {
         const data = await res.json();
+        apiCache.set(`/api/users/${targetUser}/activity`, data);
         setUserActivity(data);
       }
     } catch(e) {
