@@ -1140,7 +1140,7 @@ app.get('/api/cs/steam/inventory/:steamId', requireUser, async (req, res) => {
     );
 
     // Shared Steam Market fetch helpers
-    const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36';
+    const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
     let usdToSek = 10.5;
     if (allMissing.length > 0) {
       try {
@@ -1213,15 +1213,15 @@ app.get('/api/cs/steam/inventory/:steamId', requireUser, async (req, res) => {
 
       // 4. HTML listing page — extract var line1 graph data (last recorded sale price).
       // Steam embeds historical sale prices as inline JS on the public listing page,
-      // accessible without auth. Used when no active listings exist but sales have occurred.
+      // accessible without auth. currency=1 forces USD so the value is directly usable.
       try {
         const r = await fetch(
-          `https://steamcommunity.com/market/listings/730/${encoded}`,
-          { headers: { 'User-Agent': UA } }
+          `https://steamcommunity.com/market/listings/730/${encoded}?currency=1&l=english`,
+          { headers: { 'User-Agent': UA, 'Accept-Language': 'en-US,en;q=0.9' } }
         );
         if (r.ok) {
           const html = await r.text();
-          const match = html.match(/var line1\s*=\s*(\[[\s\S]*?\]);/);
+          const match = html.match(/var line1\s*=\s*(\[[\s\S]*?\]);?/);
           if (match) {
             const data = JSON.parse(match[1]);
             if (Array.isArray(data) && data.length > 0) {
