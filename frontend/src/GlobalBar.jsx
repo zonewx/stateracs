@@ -210,7 +210,7 @@ export default function GlobalBar({ isDark, authUsername, onNavigate, onLogout, 
         </button>
 
         {/* Logout */}
-        <button onClick={onLogout} title="Sign out" className={`p-1.5 rounded-lg ml-1 shrink-0 ${isDark ? 'text-gray-500 hover:text-red-400 hover:bg-gray-800' : 'text-gray-400 hover:text-red-500 hover:bg-gray-100'} transition`}>
+        <button onClick={() => onLogout()} title="Sign out" className={`p-1.5 rounded-lg ml-1 shrink-0 ${isDark ? 'text-gray-500 hover:text-red-400 hover:bg-gray-800' : 'text-gray-400 hover:text-red-500 hover:bg-gray-100'} transition`}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/>
           </svg>
