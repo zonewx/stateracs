@@ -352,21 +352,22 @@ export default function Sidebar({ currentUser, onLogout, isDark, selectedBroker,
 
   return (
     <>
-    <div className={`${sidebarWidth} ${bg} transition-all duration-300 flex flex-col h-screen sticky top-0 pt-12`}>
-      <div className="p-4 flex items-center justify-between">
-        <button
-          onClick={() => setIsExpanded(!isExpanded)}
-          className={`p-2 rounded-lg ${hoverBg} transition-colors shrink-0`}
-          title={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
-        >
-          <Menu size={20} className={textPrimary} />
-        </button>
-        {isExpanded && (
-          <h1 className={`text-lg font-bold ${textPrimary} flex-1 text-center`}>Verumen</h1>
-        )}
-        {isExpanded && <div className="w-9 shrink-0" />}
-      </div>
+    {/* Fixed sidebar header — sits above GlobalBar in the sidebar lane */}
+    <div className={`fixed top-0 left-0 ${sidebarWidth} h-12 z-[51] ${bg} flex items-center px-3 gap-2 transition-all duration-300`}>
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className={`p-2 rounded-lg ${hoverBg} transition-colors shrink-0`}
+        title={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
+      >
+        <Menu size={20} className={textPrimary} />
+      </button>
+      {isExpanded && (
+        <h1 className={`text-lg font-bold ${textPrimary} flex-1 text-center`}>Verumen</h1>
+      )}
+      {isExpanded && <div className="w-9 shrink-0" />}
+    </div>
 
+    <div className={`${sidebarWidth} ${bg} transition-all duration-300 flex flex-col h-screen sticky top-0 pt-12`}>
       <nav className="flex-1 overflow-y-auto p-2">
         <div className="space-y-0.5">
           {visibleMenuItems.map(item => {

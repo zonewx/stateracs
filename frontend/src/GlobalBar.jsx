@@ -146,11 +146,8 @@ export default function GlobalBar({ isDark, authUsername, onNavigate, onLogout, 
 
   return (
     <div className={`fixed top-0 left-0 right-0 z-50 h-12 flex items-center px-4 ${isDark ? 'bg-gray-900' : 'bg-white'}`}>
-      {/* Left spacer */}
-      <div className="flex-1" />
-
-      {/* Center — Search */}
-      <div ref={searchRef} className="w-full max-w-md relative">
+      {/* Center — Search (absolutely centered so ticker width never shifts it) */}
+      <div ref={searchRef} className="absolute left-1/2 -translate-x-1/2 w-full max-w-md z-10">
         <div className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border text-sm ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-gray-50 border-gray-200'}`}>
           <svg width="16" height="16" viewBox="0 0 28 28" fill="none" className="shrink-0">
             <rect width="28" height="28" rx="6" fill="#0f1e3c"/>
@@ -195,11 +192,13 @@ export default function GlobalBar({ isDark, authUsername, onNavigate, onLogout, 
         )}
       </div>
 
-      {/* Right — ticker + buttons */}
-      <div className="flex-1 flex items-center justify-end gap-1">
-        <MarketTicker isDark={isDark} />
+      {/* Right — buttons always visible, ticker clips if too wide */}
+      <div className="ml-auto flex items-center gap-1 shrink-0">
+        <div className="overflow-hidden min-w-0 shrink">
+          <MarketTicker isDark={isDark} />
+        </div>
         {/* Friends with notification dot */}
-        <button onClick={() => onNavigate('friends')} title="Friends" className={`relative p-1.5 rounded-lg ${isDark ? 'text-gray-400 hover:text-white hover:bg-gray-800' : 'text-gray-400 hover:text-gray-900 hover:bg-gray-100'} transition`}>
+        <button onClick={() => onNavigate('friends')} title="Friends" className={`relative p-1.5 rounded-lg shrink-0 ${isDark ? 'text-gray-400 hover:text-white hover:bg-gray-800' : 'text-gray-400 hover:text-gray-900 hover:bg-gray-100'} transition`}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/>
           </svg>
@@ -211,7 +210,7 @@ export default function GlobalBar({ isDark, authUsername, onNavigate, onLogout, 
         </button>
 
         {/* Logout */}
-        <button onClick={onLogout} title="Sign out" className={`p-1.5 rounded-lg ml-1 ${isDark ? 'text-gray-500 hover:text-red-400 hover:bg-gray-800' : 'text-gray-400 hover:text-red-500 hover:bg-gray-100'} transition`}>
+        <button onClick={onLogout} title="Sign out" className={`p-1.5 rounded-lg ml-1 shrink-0 ${isDark ? 'text-gray-500 hover:text-red-400 hover:bg-gray-800' : 'text-gray-400 hover:text-red-500 hover:bg-gray-100'} transition`}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/>
           </svg>
