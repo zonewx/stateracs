@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { MARKET_INDEXES } from './GlobalBar';
 
 function authHeaders(extra = {}) {
   const token = sessionStorage.getItem('auth_token');
@@ -22,6 +23,9 @@ export default function SettingsPage({ isDark, baseCurrency, onSetBaseCurrency }
   const [syncingPrices, setSyncingPrices] = useState(false);
   const [syncStatus, setSyncStatus] = useState('');
   const [lastSync, setLastSync] = useState(null);
+  const [marketSel, setMarketSel] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('marketIndexes')) || []; } catch { return []; }
+  });
 
   const card = `rounded-2xl border p-6 ${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`;
   const label = `text-xs font-semibold uppercase tracking-wider mb-2 block ${isDark ? 'text-gray-400' : 'text-gray-500'}`;
@@ -85,6 +89,42 @@ export default function SettingsPage({ isDark, baseCurrency, onSetBaseCurrency }
               Used across Stock Portfolio and CS Skins for value calculations and display.
             </p>
           </div>
+        </div>
+
+        <div className={card}>
+          <h2 className={`text-sm font-bold uppercase tracking-wider mb-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>Market Bar</h2>
+          <p className={`text-sm mb-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+            Choose up to 3 market indexes to display in the top bar. Prices refresh every 60 seconds.
+          </p>
+          <div className="flex flex-col gap-2">
+            {MARKET_INDEXES.map(idx => {
+              const checked = marketSel.includes(idx.id);
+              const disabled = !checked && marketSel.length >= 3;
+              return (
+                <label key={idx.id} className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border cursor-pointer transition ${disabled ? 'opacity-40 cursor-not-allowed' : ''} ${isDark ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-200 hover:bg-gray-50'}`}>
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    disabled={disabled}
+                    onChange={() => {
+                      const next = checked
+                        ? marketSel.filter(id => id !== idx.id)
+                        : [...marketSel, idx.id];
+                      setMarketSel(next);
+                      localStorage.setItem('marketIndexes', JSON.stringify(next));
+                      window.dispatchEvent(new Event('marketIndexes-updated'));
+                    }}
+                    className="w-4 h-4 accent-blue-500"
+                  />
+                  <span className={`text-sm font-medium ${isDark ? 'text-gray-200' : 'text-gray-800'}`}>{idx.label}</span>
+                  <span className={`ml-auto text-xs font-mono ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{idx.ticker}</span>
+                </label>
+              );
+            })}
+          </div>
+          {marketSel.length >= 3 && (
+            <p className={`text-xs mt-3 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Maximum of 3 indexes selected. Uncheck one to add another.</p>
+          )}
         </div>
 
         <div className={card}>

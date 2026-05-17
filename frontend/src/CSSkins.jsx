@@ -6,7 +6,14 @@ const EXTERIORS = ['Factory New', 'Minimal Wear', 'Field-Tested', 'Well-Worn', '
 const CURRENCIES = ['SEK', 'USD', 'EUR'];
 
 function fmt(n) { return (n || 0).toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
-function fmtSEK(n) { return `${fmt(n)} kr`; }
+const CUR_SYM = { SEK: 'kr', USD: '$', EUR: '€', GBP: '£' };
+function fmtCur(n, bc = 'SEK') {
+  const v = n || 0;
+  if (bc === 'SEK') return `${v.toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr`;
+  const sym = CUR_SYM[bc];
+  const formatted = v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return sym ? `${sym}${formatted}` : `${formatted} ${bc}`;
+}
 
 function SteamScreenshotEmbed({ url, isDark }) {
   const [preview, setPreview] = useState(null);
@@ -60,7 +67,7 @@ function authHeaders(extra = {}) {
   return { ...(token ? { 'Authorization': `Bearer ${token}` } : {}), ...extra };
 }
 
-function SkinCard({ item, isDark, onClick, onSetPrice, onClearPrice }) {
+function SkinCard({ item, isDark, onClick, onSetPrice, onClearPrice, baseCurrency = 'SEK' }) {
   const [editing, setEditing] = useState(false);
   const [inputVal, setInputVal] = useState('');
   const isSpecial = item.quality && (item.quality.includes('StatTrak') || item.quality.includes('Souvenir'));
@@ -132,7 +139,7 @@ function SkinCard({ item, isDark, onClick, onSetPrice, onClearPrice }) {
                 type="number"
                 min="0"
                 step="any"
-                placeholder="kr"
+                placeholder={CUR_SYM[baseCurrency] || baseCurrency}
                 value={inputVal}
                 onChange={e => setInputVal(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') saveEdit(e); if (e.key === 'Escape') cancelEdit(e); }}
@@ -141,9 +148,9 @@ function SkinCard({ item, isDark, onClick, onSetPrice, onClearPrice }) {
               <button onClick={saveEdit} className="text-[10px] px-1.5 py-1 rounded bg-green-600 text-white hover:bg-green-500 shrink-0">✓</button>
               <button onClick={cancelEdit} className={`text-[10px] px-1.5 py-1 rounded shrink-0 ${isDark ? 'bg-gray-700 text-gray-400 hover:bg-gray-600' : 'bg-gray-200 text-gray-500 hover:bg-gray-300'}`}>✕</button>
             </div>
-          ) : item.priceSEK > 0 ? (
+          ) : item.price > 0 ? (
             <div className="flex items-center gap-1">
-              <p className="text-sm font-bold text-green-400">{fmtSEK(item.priceSEK)}</p>
+              <p className="text-sm font-bold text-green-400">{fmtCur(item.price, baseCurrency)}</p>
               {item.isOverride && (
                 <button onClick={e => { e.stopPropagation(); onClearPrice(); }} title="Remove manual price" className="text-[10px] text-gray-500 hover:text-red-400 transition">✕</button>
               )}
@@ -174,8 +181,8 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
   const [steamLoading, setSteamLoading] = useState(false);
   const [steamError, setSteamError] = useState('');
   const [invSort, setInvSort] = useState('default');
-  const [inventory, setInventory] = useState(() => apiCache.get('/api/cs/inventory') || []);
-  const [pnl, setPnl] = useState(() => apiCache.get('/api/cs/pnl'));
+  const [inventory, setInventory] = useState(() => apiCache.get(`/api/cs/inventory?currency=${baseCurrency}`) || []);
+  const [pnl, setPnl] = useState(() => apiCache.get(`/api/cs/pnl?currency=${baseCurrency}`));
   const [pricesReady, setPricesReady] = useState(() => apiCache.has('/api/cs/prices-ready'));
   const [showAddForm, setShowAddForm] = useState(false);
   const [addModalTab, setAddModalTab] = useState('inventory');
@@ -208,6 +215,8 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
     notes: '', screenshot_url: ''
   });
 
+  const fmtBC = n => fmtCur(n, baseCurrency);
+
   const card = `${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border rounded-xl`;
   const input = `w-full px-3 py-2 rounded-lg border text-sm outline-none focus:ring-2 focus:ring-orange-500/30 focus:border-orange-500 ${isDark ? 'bg-gray-700 border-gray-600 text-white placeholder-gray-500' : 'bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400'}`;
   const label = `text-xs font-semibold uppercase tracking-wider block mb-1.5 ${isDark ? 'text-gray-400' : 'text-gray-500'}`;
@@ -219,12 +228,12 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
     try {
       const h = authHeaders();
       const [inv, p, s] = await Promise.all([
-        fetch('/api/cs/inventory', { headers: h }).then(r => r.json()),
-        fetch('/api/cs/pnl', { headers: h }).then(r => r.json()),
+        fetch(`/api/cs/inventory?currency=${baseCurrency}`, { headers: h }).then(r => r.json()),
+        fetch(`/api/cs/pnl?currency=${baseCurrency}`, { headers: h }).then(r => r.json()),
         fetch('/api/cs/settings', { headers: h }).then(r => r.json()),
       ]);
-      apiCache.set('/api/cs/inventory', Array.isArray(inv) ? inv : []);
-      apiCache.set('/api/cs/pnl', p);
+      apiCache.set(`/api/cs/inventory?currency=${baseCurrency}`, Array.isArray(inv) ? inv : []);
+      apiCache.set(`/api/cs/pnl?currency=${baseCurrency}`, p);
       apiCache.set('/api/cs/settings', s);
       setInventory(Array.isArray(inv) ? inv : []);
       setPnl(p);
@@ -234,7 +243,7 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
       if (ready) apiCache.set('/api/cs/prices-ready', true);
       setPricesReady(ready);
     } catch(e) { console.error(e); }
-  }, []);
+  }, [baseCurrency]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -276,7 +285,7 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
     }
     setSteamLoading(true); setSteamError('');
     try {
-      const res = await fetch(`/api/cs/steam/inventory/${id}`, { headers: authHeaders() });
+      const res = await fetch(`/api/cs/steam/inventory/${id}?currency=${baseCurrency}`, { headers: authHeaders() });
       const data = await res.json();
       if (!res.ok) { setSteamError(data.error || 'Failed to fetch inventory'); }
       else {
@@ -301,7 +310,7 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
     } catch(e) {}
     setModalInvLoading(true);
     try {
-      const res = await fetch(`/api/cs/steam/inventory/${id}`, { headers: authHeaders() });
+      const res = await fetch(`/api/cs/steam/inventory/${id}?currency=${baseCurrency}`, { headers: authHeaders() });
       const data = await res.json();
       if (res.ok) {
         setModalInventory(data.items || []);
@@ -327,40 +336,42 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
     setModalInvSearch('');
   };
 
-  const saveOverride = async (name, priceSEK) => {
-    await fetch('/api/cs/prices/override', {
+  const saveOverride = async (name, price) => {
+    const res = await fetch('/api/cs/prices/override', {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ skin_name: name, price_sek: priceSEK }),
+      body: JSON.stringify({ skin_name: name, price, currency: baseCurrency }),
     });
+    if (!res.ok) return;
     setSteamInventory(prev => {
       if (!prev) return prev;
-      const items = prev.items.map(i => i.name === name ? { ...i, priceSEK, isOverride: true } : i);
-      return { ...prev, items, totalValue: items.reduce((s, i) => s + i.priceSEK, 0) };
+      const items = prev.items.map(i => i.name === name ? { ...i, price, isOverride: true } : i);
+      return { ...prev, items, totalValue: items.reduce((s, i) => s + i.price, 0) };
     });
   };
 
   const clearOverride = async (name) => {
-    await fetch(`/api/cs/prices/override/${encodeURIComponent(name)}`, {
+    const res = await fetch(`/api/cs/prices/override/${encodeURIComponent(name)}`, {
       method: 'DELETE',
       headers: authHeaders(),
     });
+    if (!res.ok) return;
     setSteamInventory(prev => {
       if (!prev) return prev;
-      const items = prev.items.map(i => i.name === name ? { ...i, priceSEK: 0, isOverride: false } : i);
-      return { ...prev, items, totalValue: items.reduce((s, i) => s + i.priceSEK, 0) };
+      const items = prev.items.map(i => i.name === name ? { ...i, price: 0, isOverride: false } : i);
+      return { ...prev, items, totalValue: items.reduce((s, i) => s + i.price, 0) };
     });
   };
 
   const selectModalSkin = (item) => {
     setSelectedModalItem(item);
-    setAddForm(f => ({ ...f, skin_name: item.name, purchase_price: item.priceSEK > 0 ? String(item.priceSEK.toFixed(2)) : f.purchase_price }));
+    setAddForm(f => ({ ...f, skin_name: item.name, purchase_price: item.price > 0 ? String(item.price.toFixed(2)) : f.purchase_price }));
   };
 
   const searchSkins = async (q) => {
     if (q.length < 2) { setSkinSearchResults([]); return; }
     try {
-      const res = await fetch(`/api/cs/prices/search/${encodeURIComponent(q)}`, { headers: authHeaders() });
+      const res = await fetch(`/api/cs/prices/search/${encodeURIComponent(q)}?currency=${baseCurrency}`, { headers: authHeaders() });
       setSkinSearchResults(await res.json());
     } catch(e) {}
   };
@@ -468,8 +479,8 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
     .sort((a, b) => {
       let av = a[sortCol], bv = b[sortCol];
       if (sortCol === 'pnl') {
-        av = a.sold ? (a.sale_price - a.purchase_price) : ((a.current_price_sek || 0) - a.purchase_price);
-        bv = b.sold ? (b.sale_price - b.purchase_price) : ((b.current_price_sek || 0) - b.purchase_price);
+        av = a.sold ? ((a.sale_price_display || 0) - (a.purchase_price_display || 0)) : ((a.current_price || 0) - (a.purchase_price_display || 0));
+        bv = b.sold ? ((b.sale_price_display || 0) - (b.purchase_price_display || 0)) : ((b.current_price || 0) - (b.purchase_price_display || 0));
       }
       if (av == null) av = '';
       if (bv == null) bv = '';
@@ -499,14 +510,14 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
               {pnl && (
                 <>
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    <PnlCard label="Current Value" value={fmtSEK(pnl.currentValue)} />
-                    <PnlCard label="Total Invested" value={fmtSEK(pnl.totalInvested)} />
-                    <PnlCard label="Unrealised P&L" value={`${pnl.unrealised >= 0 ? '+' : ''}${fmtSEK(pnl.unrealised)}`} positive={pnl.unrealised >= 0} sub={`${pnl.holdingCount} skins held`} />
-                    <PnlCard label="Realised P&L" value={`${pnl.realised >= 0 ? '+' : ''}${fmtSEK(pnl.realised)}`} positive={pnl.realised >= 0} sub={`${pnl.soldCount} skins sold`} />
+                    <PnlCard label="Current Value" value={fmtBC(pnl.currentValue)} />
+                    <PnlCard label="Total Invested" value={fmtBC(pnl.totalInvested)} />
+                    <PnlCard label="Unrealised P&L" value={`${pnl.unrealised >= 0 ? '+' : ''}${fmtBC(pnl.unrealised)}`} positive={pnl.unrealised >= 0} sub={`${pnl.holdingCount} skins held`} />
+                    <PnlCard label="Realised P&L" value={`${pnl.realised >= 0 ? '+' : ''}${fmtBC(pnl.realised)}`} positive={pnl.realised >= 0} sub={`${pnl.soldCount} skins sold`} />
                   </div>
                   <div className={`${card} p-5`}>
                     <p className={`text-xs font-semibold uppercase tracking-wider mb-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>Total P&L</p>
-                    <p className={`text-4xl font-bold ${pnl.totalPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>{pnl.totalPnl >= 0 ? '+' : ''}{fmtSEK(pnl.totalPnl)}</p>
+                    <p className={`text-4xl font-bold ${pnl.totalPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>{pnl.totalPnl >= 0 ? '+' : ''}{fmtBC(pnl.totalPnl)}</p>
                   </div>
                 </>
               )}
@@ -533,18 +544,18 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
                   )}
                   {steamInventory && (() => {
                     const tradable = steamInventory.items.filter(i=>i.tradable);
-                    const sorted = invSort === 'price-desc' ? [...tradable].sort((a,b)=>b.priceSEK-a.priceSEK)
-                      : invSort === 'price-asc' ? [...tradable].sort((a,b)=>a.priceSEK-b.priceSEK)
+                    const sorted = invSort === 'price-desc' ? [...tradable].sort((a,b)=>b.price-a.price)
+                      : invSort === 'price-asc' ? [...tradable].sort((a,b)=>a.price-b.price)
                       : tradable;
                     return (
                       <div>
                         <div className="flex gap-6 mb-4">
                           <div><p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} mb-1`}>Tradable items</p><p className="text-xl font-bold">{tradable.length}</p></div>
-                          <div><p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} mb-1`}>Est. Value</p><p className="text-xl font-bold text-green-400">{fmtSEK(tradable.reduce((s,i)=>s+i.priceSEK,0))}</p></div>
+                          <div><p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} mb-1`}>Est. Value</p><p className="text-xl font-bold text-green-400">{fmtBC(tradable.reduce((s,i)=>s+i.price,0))}</p></div>
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                           {sorted.map((item, i) => (
-                            <SkinCard key={i} item={item} isDark={isDark}
+                            <SkinCard key={i} item={item} isDark={isDark} baseCurrency={baseCurrency}
                               onSetPrice={p => saveOverride(item.name, p)}
                               onClearPrice={() => clearOverride(item.name)} />
                           ))}
@@ -567,9 +578,9 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
                   </div>
                   <div className="flex flex-col divide-y ${isDark ? 'divide-gray-700' : 'divide-gray-100'}">
                     {inventory.slice(0, 5).map(item => {
-                      const costSEK = item.purchase_price_sek || item.purchase_price;
-                      const currentSEK = item.current_price_sek || 0;
-                      const pnlVal = item.sold ? (item.sale_price - costSEK) : (currentSEK - costSEK);
+                      const costPrice = item.purchase_price_display || 0;
+                      const currentPrice = item.current_price || 0;
+                      const pnlVal = item.sold ? ((item.sale_price_display || 0) - costPrice) : (currentPrice - costPrice);
                       const pnlPos = pnlVal >= 0;
                       return (
                         <div key={item.id} className={`flex items-center gap-4 py-3 first:pt-0 last:pb-0`}>
@@ -582,14 +593,11 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
                             </p>
                           </div>
                           <div className="text-right shrink-0">
-                            <p className={`text-sm font-bold ${currentSEK === 0 && !item.sold ? (isDark ? 'text-gray-500' : 'text-gray-400') : pnlPos ? 'text-green-400' : 'text-red-400'}`}>
-                              {currentSEK === 0 && !item.sold ? '—' : `${pnlPos ? '+' : ''}${fmtSEK(pnlVal)}`}
+                            <p className={`text-sm font-bold ${currentPrice === 0 && !item.sold ? (isDark ? 'text-gray-500' : 'text-gray-400') : pnlPos ? 'text-green-400' : 'text-red-400'}`}>
+                              {currentPrice === 0 && !item.sold ? '—' : `${pnlPos ? '+' : ''}${fmtBC(pnlVal)}`}
                             </p>
                             <p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-                              {item.purchase_currency !== 'SEK'
-                                ? `${fmt(item.purchase_price)} ${item.purchase_currency}`
-                                : fmtSEK(item.purchase_price)
-                              }
+                              {fmtBC(item.purchase_price_display)}
                             </p>
                           </div>
                           <span className={`text-xs font-semibold px-2 py-0.5 rounded-full shrink-0 ${item.sold ? (isDark ? 'bg-gray-700 text-gray-400' : 'bg-gray-100 text-gray-500') : 'bg-green-900/40 text-green-400'}`}>
@@ -633,18 +641,18 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
               )}
               {steamInventory && (() => {
                 const tradable = steamInventory.items.filter(i=>i.tradable);
-                const sorted = invSort === 'price-desc' ? [...tradable].sort((a,b)=>b.priceSEK-a.priceSEK)
-                  : invSort === 'price-asc' ? [...tradable].sort((a,b)=>a.priceSEK-b.priceSEK)
+                const sorted = invSort === 'price-desc' ? [...tradable].sort((a,b)=>b.price-a.price)
+                  : invSort === 'price-asc' ? [...tradable].sort((a,b)=>a.price-b.price)
                   : tradable;
                 return (
                   <>
                     <div className={`${card} p-4 flex gap-6`}>
                       <div><p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} mb-1`}>Tradable items</p><p className="text-2xl font-bold">{tradable.length}</p></div>
-                      <div><p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} mb-1`}>Estimated value</p><p className="text-2xl font-bold text-green-400">{fmtSEK(tradable.reduce((s,i)=>s+i.priceSEK,0))}</p></div>
+                      <div><p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} mb-1`}>Estimated value</p><p className="text-2xl font-bold text-green-400">{fmtBC(tradable.reduce((s,i)=>s+i.price,0))}</p></div>
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                       {sorted.map((item, i) => (
-                        <SkinCard key={i} item={item} isDark={isDark}
+                        <SkinCard key={i} item={item} isDark={isDark} baseCurrency={baseCurrency}
                           onSetPrice={p => saveOverride(item.name, p)}
                           onClearPrice={() => clearOverride(item.name)} />
                       ))}
@@ -729,7 +737,7 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
                                   <div className="flex-1 min-w-0">
                                     <p className="font-semibold text-sm truncate">{selectedModalItem.name}</p>
                                     <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{selectedModalItem.type}</p>
-                                    {selectedModalItem.priceSEK > 0 && <p className="text-xs text-green-400 font-bold mt-0.5">Market: {fmtSEK(selectedModalItem.priceSEK)}</p>}
+                                    {selectedModalItem.price > 0 && <p className="text-xs text-green-400 font-bold mt-0.5">Market: {fmtBC(selectedModalItem.price)}</p>}
                                   </div>
                                   <button onClick={() => { setSelectedModalItem(null); setAddForm(f => ({ ...f, skin_name: '' })); }} className={`text-xs px-2 py-1 rounded ${isDark ? 'bg-gray-700 text-gray-400 hover:bg-gray-600' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'} transition shrink-0`}>Change</button>
                                 </div>
@@ -766,7 +774,7 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
                                           >
                                             <img src={item.iconUrl} alt={item.name} className="w-full aspect-square object-contain mb-1" />
                                             <p className={`text-xs truncate ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{item.name}</p>
-                                            {item.priceSEK > 0 && <p className="text-xs text-green-400 font-bold">{fmtSEK(item.priceSEK)}</p>}
+                                            {item.price > 0 && <p className="text-xs text-green-400 font-bold">{fmtBC(item.price)}</p>}
                                           </button>
                                         ))
                                       }
@@ -832,7 +840,7 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
                                 {skinSearchResults.map((r, i) => (
                                   <div key={i} onClick={() => { setAddForm(f => ({ ...f, skin_name: r.skin_name })); setSkinSearch(r.skin_name); setSkinSearchResults([]); }} className={`flex items-center justify-between px-4 py-2.5 cursor-pointer ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-50'} border-b ${isDark ? 'border-gray-700' : 'border-gray-100'} last:border-0`}>
                                     <span className="text-sm">{r.skin_name}</span>
-                                    <span className="text-xs text-green-400 font-bold">{fmtSEK(r.price_sek)}</span>
+                                    <span className="text-xs text-green-400 font-bold">{fmtBC(r.price)}</span>
                                   </div>
                                 ))}
                               </div>
@@ -941,7 +949,7 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
                                       <div className="flex-1 min-w-0">
                                         <p className="font-semibold text-sm truncate">{selectedEditItem.name}</p>
                                         <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{selectedEditItem.type}</p>
-                                        {selectedEditItem.priceSEK > 0 && <p className="text-xs text-green-400 font-bold mt-0.5">Market: {fmtSEK(selectedEditItem.priceSEK)}</p>}
+                                        {selectedEditItem.price > 0 && <p className="text-xs text-green-400 font-bold mt-0.5">Market: {fmtBC(selectedEditItem.price)}</p>}
                                       </div>
                                     </>
                                   ) : (
@@ -990,7 +998,7 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
                                         >
                                           <img src={item.iconUrl} alt={item.name} className="w-full aspect-square object-contain mb-1" />
                                           <p className={`text-xs truncate ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>{item.name}</p>
-                                          {item.priceSEK > 0 && <p className="text-xs text-green-400 font-bold">{fmtSEK(item.priceSEK)}</p>}
+                                          {item.price > 0 && <p className="text-xs text-green-400 font-bold">{fmtBC(item.price)}</p>}
                                         </button>
                                       );
                                     })
@@ -1134,7 +1142,7 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
                             { key: 'float_value', label: 'Float' },
                             { key: 'purchase_date', label: 'Buy Date' },
                             { key: 'purchase_price', label: 'Buy Price' },
-                            { key: 'current_price_sek', label: 'Current' },
+                            { key: 'current_price', label: 'Current' },
                             { key: 'pnl', label: 'P&L' },
                             { key: 'sold', label: 'Status' },
                           ].map(({ key, label: colLabel }) => (
@@ -1151,9 +1159,9 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
                       </thead>
                       <tbody>
                         {filteredInv.map(item => {
-                          const currentSEK = item.current_price_sek || 0;
-                          const buySEK = item.purchase_price_sek || item.purchase_price;
-                          const pnlVal = item.sold ? (item.sale_price - buySEK) : (currentSEK - buySEK);
+                          const currentPrice = item.current_price || 0;
+                          const buyPrice = item.purchase_price_display || 0;
+                          const pnlVal = item.sold ? ((item.sale_price_display || 0) - buyPrice) : (currentPrice - buyPrice);
                           const pnlPos = pnlVal >= 0;
                           const isExpanded = expandedRow === item.id;
                           const hasScreenshot = item.screenshot_url || (item.sold && item.cs_sales?.[0]?.screenshot_url);
@@ -1174,19 +1182,16 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
                               <td className={`px-4 py-3 text-xs font-mono ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{item.float_value ? parseFloat(item.float_value).toFixed(4) : '—'}</td>
                               <td className={`px-4 py-3 text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{item.purchase_date}</td>
                               <td className="px-4 py-3 whitespace-nowrap font-mono text-xs">
-                                {item.purchase_currency && item.purchase_currency !== 'SEK'
-                                  ? <span>{fmt(item.purchase_price)} <span className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{item.purchase_currency}</span></span>
-                                  : fmtSEK(item.purchase_price)
-                                }
+                                {fmtBC(item.purchase_price_display)}
                               </td>
                               <td className="px-4 py-3 whitespace-nowrap font-mono text-xs">
                                 {item.sold
-                                  ? <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>{fmtSEK(item.sale_price)}</span>
-                                  : (currentSEK > 0 ? fmtSEK(currentSEK) : '—')
+                                  ? <span className={isDark ? 'text-gray-500' : 'text-gray-400'}>{fmtBC(item.sale_price_display)}</span>
+                                  : (currentPrice > 0 ? fmtBC(currentPrice) : '—')
                                 }
                               </td>
                               <td className={`px-4 py-3 font-bold whitespace-nowrap text-xs ${pnlPos ? 'text-green-400' : 'text-red-400'}`}>
-                                {pnlPos ? '+' : ''}{fmtSEK(pnlVal)}
+                                {pnlPos ? '+' : ''}{fmtBC(pnlVal)}
                               </td>
                               <td className="px-4 py-3">
                                 <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${item.sold ? `${isDark ? 'bg-gray-700 text-gray-400' : 'bg-gray-100 text-gray-500'}` : 'bg-green-900/40 text-green-400'}`}>

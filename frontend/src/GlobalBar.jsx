@@ -1,5 +1,85 @@
 import { useState, useEffect, useRef } from 'react';
 
+export const MARKET_INDEXES = [
+  { id: 'sp500',    label: 'S&P 500',              short: 'S&P 500', ticker: '^GSPC'   },
+  { id: 'nasdaq100',label: 'NASDAQ 100',            short: 'NDX',     ticker: '^NDX'    },
+  { id: 'omxs30',  label: 'OMXS30',                short: 'OMXS30',  ticker: '^OMX'    },
+  { id: 'omxc25',  label: 'OMX Copenhagen 25',      short: 'OMXC25',  ticker: '^OMXC25' },
+  { id: 'omxh25',  label: 'OMX Helsinki 25',        short: 'OMXH25',  ticker: '^OMXH25' },
+  { id: 'osebx',   label: 'OSEBX Oslo',             short: 'OSEBX',   ticker: '^OSEOBX' },
+];
+
+const STORAGE_KEY = 'marketIndexes';
+const REFRESH_MS  = 60_000;
+
+function authHeader() {
+  const t = sessionStorage.getItem('auth_token');
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
+
+function fmt(n) {
+  return n?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '—';
+}
+
+function MarketTicker({ isDark }) {
+  const [quotes, setQuotes]       = useState([]);
+  const [selected, setSelected]   = useState(() => {
+    try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; }
+  });
+  const intervalRef = useRef(null);
+
+  useEffect(() => {
+    const onStorage = () => {
+      try { setSelected(JSON.parse(localStorage.getItem(STORAGE_KEY)) || []); } catch {}
+    };
+    window.addEventListener('marketIndexes-updated', onStorage);
+    return () => window.removeEventListener('marketIndexes-updated', onStorage);
+  }, []);
+
+  useEffect(() => {
+    if (!selected.length) { setQuotes([]); return; }
+
+    const tickers = selected
+      .map(id => MARKET_INDEXES.find(m => m.id === id)?.ticker)
+      .filter(Boolean)
+      .join(',');
+
+    const fetch_ = () =>
+      fetch(`/api/market-indexes?symbols=${encodeURIComponent(tickers)}`, { headers: authHeader() })
+        .then(r => r.json())
+        .then(data => { if (Array.isArray(data)) setQuotes(data); })
+        .catch(() => {});
+
+    fetch_();
+    intervalRef.current = setInterval(fetch_, REFRESH_MS);
+    return () => clearInterval(intervalRef.current);
+  }, [selected]);
+
+  if (!selected.length || !quotes.length) return null;
+
+  const divider = isDark ? 'border-gray-700' : 'border-gray-200';
+  const labelCls = isDark ? 'text-gray-500' : 'text-gray-400';
+  const valCls   = isDark ? 'text-gray-200' : 'text-gray-800';
+
+  return (
+    <div className={`hidden md:flex items-center gap-3 border-r mr-1 pr-3 ${divider}`}>
+      {quotes.map((q, i) => {
+        const meta  = MARKET_INDEXES.find(m => m.ticker === q.symbol);
+        const pos   = q.changePct >= 0;
+        const arrow = pos ? '▲' : '▼';
+        const pctCls = pos ? 'text-green-400' : 'text-red-400';
+        return (
+          <div key={q.symbol} className={`flex items-center gap-1.5 text-xs ${i > 0 ? `border-l pl-3 ${divider}` : ''}`}>
+            <span className={`font-medium ${labelCls}`}>{meta?.short ?? q.symbol}</span>
+            <span className={`font-mono font-semibold ${valCls}`}>{fmt(q.price)}</span>
+            <span className={`font-semibold ${pctCls}`}>{arrow}{Math.abs(q.changePct).toFixed(2)}%</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function GlobalBar({ isDark, authUsername, onNavigate, onLogout, userRole, searchInputRef }) {
   const [search, setSearch] = useState('');
   const [results, setResults] = useState([]);
@@ -110,6 +190,9 @@ export default function GlobalBar({ isDark, authUsername, onNavigate, onLogout, 
           </div>
         )}
       </div>
+
+      {/* Market ticker */}
+      <MarketTicker isDark={isDark} />
 
       {/* Right */}
       <div className="flex items-center gap-1 shrink-0">

@@ -598,9 +598,18 @@ function detectBrokerAndParse(filename, content) {
 
 // ── Transactions ────────────────────────────────────────────────────────────
 app.get('/api/transactions', requireUser, async (req, res) => {
+  const BC = (req.query.currency || 'SEK').toUpperCase();
   const { data, error } = await supabase.from('transactions').select('*').eq('user_id', req.user.id).order('date', { ascending: false });
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+  let bcRate = 1;
+  if (BC !== 'SEK') {
+    try {
+      const fx = await fetch(`https://api.frankfurter.app/latest?from=SEK&to=${BC}`);
+      const fxd = await fx.json();
+      if (fxd?.rates?.[BC]) bcRate = fxd.rates[BC];
+    } catch(e) {}
+  }
+  res.json((data || []).map(t => ({ ...t, total: parseFloat(((t.total_sek || 0) * bcRate).toFixed(2)) })));
 });
 
 app.get('/api/transactions/count', requireUser, async (req, res) => {
@@ -761,6 +770,21 @@ app.get('/api/transactions/reconstruct', requireUser, async (req, res) => {
   res.json(result);
 });
 
+// ── Market index quotes ──────────────────────────────────────────────────────
+app.get('/api/market-indexes', requireUser, async (req, res) => {
+  const symbols = (req.query.symbols || '').split(',').map(s => s.trim()).filter(Boolean).slice(0, 3);
+  if (!symbols.length) return res.json([]);
+  try {
+    const quotes = await Promise.all(symbols.map(s => yahooFinance.quote(s).catch(() => null)));
+    res.json(quotes.filter(Boolean).map(q => ({
+      symbol: q.symbol,
+      price: q.regularMarketPrice || 0,
+      changePct: q.regularMarketChangePercent || 0,
+      change: q.regularMarketChange || 0,
+    })));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── Portfolio valuation ─────────────────────────────────────────────────────
 app.post('/api/portfolio', requireUser, async (req, res) => {
   const { portfolio, baseCurrency } = req.body;
@@ -800,17 +824,27 @@ app.post('/api/portfolio', requireUser, async (req, res) => {
 
 // ── Dividends ───────────────────────────────────────────────────────────────
 app.get('/api/dividends', requireUser, async (req, res) => {
+  const BC = (req.query.currency || 'SEK').toUpperCase();
   const { data: txs } = await supabase.from('transactions').select('date, name, total_sek').eq('user_id', req.user.id).eq('type', 'dividend');
   const divs = (txs||[]).filter(t => t.total_sek);
+  let bcRate = 1;
+  if (BC !== 'SEK') {
+    try {
+      const fx = await fetch(`https://api.frankfurter.app/latest?from=SEK&to=${BC}`);
+      const fxd = await fx.json();
+      if (fxd?.rates?.[BC]) bcRate = fxd.rates[BC];
+    } catch(e) {}
+  }
+  const conv = (sek) => parseFloat((Math.abs(sek) * bcRate).toFixed(2));
   const thisYear = new Date().getFullYear().toString();
-  const totalAllTime = divs.reduce((s,t)=>s+Math.abs(t.total_sek),0);
-  const totalThisYear = divs.filter(t=>t.date?.startsWith(thisYear)).reduce((s,t)=>s+Math.abs(t.total_sek),0);
+  const totalAllTime = divs.reduce((s,t)=>s+conv(t.total_sek),0);
+  const totalThisYear = divs.filter(t=>t.date?.startsWith(thisYear)).reduce((s,t)=>s+conv(t.total_sek),0);
   const byYear = {};
-  divs.forEach(t => { const y=t.date?.substring(0,4); if(!y) return; if(!byYear[y]) byYear[y]={year:y,total:0,stocks:{}}; byYear[y].total+=Math.abs(t.total_sek); const n=t.name||'Unknown'; byYear[y].stocks[n]=(byYear[y].stocks[n]||0)+Math.abs(t.total_sek); });
+  divs.forEach(t => { const y=t.date?.substring(0,4); if(!y) return; if(!byYear[y]) byYear[y]={year:y,total:0,stocks:{}}; byYear[y].total+=conv(t.total_sek); const n=t.name||'Unknown'; byYear[y].stocks[n]=(byYear[y].stocks[n]||0)+conv(t.total_sek); });
   const byYearArr = Object.values(byYear).sort((a,b)=>b.year.localeCompare(a.year)).map(y=>({...y,stocks:Object.entries(y.stocks).map(([name,total])=>({name,total})).sort((a,b)=>b.total-a.total)}));
   const byStock = {};
-  divs.forEach(t => { const n=t.name||'Unknown'; byStock[n]=(byStock[n]||0)+Math.abs(t.total_sek); });
-  res.json({ totalAllTime, totalThisYear, byYear:byYearArr, byStock:Object.entries(byStock).map(([name,total])=>({name,total})).sort((a,b)=>b.total-a.total) });
+  divs.forEach(t => { const n=t.name||'Unknown'; byStock[n]=(byStock[n]||0)+conv(t.total_sek); });
+  res.json({ totalAllTime, totalThisYear, byYear:byYearArr, byStock:Object.entries(byStock).map(([name,total])=>({name,total})).sort((a,b)=>b.total-a.total), display_currency: BC });
 });
 
 // Public dividends endpoint
@@ -1116,8 +1150,18 @@ app.post('/api/cs/prices/sync', requireUser, async (req, res) => {
 });
 
 app.get('/api/cs/prices/search/:query', requireUser, async (req, res) => {
+  const BC = (req.query.currency || 'SEK').toUpperCase();
   const { data } = await supabase.from('cs_price_cache').select('skin_name, price_usd, price_sek').ilike('skin_name', `%${req.params.query}%`).limit(20);
-  res.json(data||[]);
+  if (!data) return res.json([]);
+  let bcRate = 1;
+  if (BC !== 'SEK') {
+    try {
+      const fx = await fetch(`https://api.frankfurter.app/latest?from=SEK&to=${BC}`);
+      const fxd = await fx.json();
+      if (fxd?.rates?.[BC]) bcRate = fxd.rates[BC];
+    } catch(e) {}
+  }
+  res.json(data.map(r => ({ ...r, price: parseFloat(((r.price_sek || 0) * bcRate).toFixed(2)) })));
 });
 
 app.get('/api/cs/prices/overrides', requireUser, async (req, res) => {
@@ -1127,10 +1171,11 @@ app.get('/api/cs/prices/overrides', requireUser, async (req, res) => {
 });
 
 app.post('/api/cs/prices/override', requireUser, async (req, res) => {
-  const { skin_name, price_sek } = req.body;
-  if (!skin_name || price_sek == null || isNaN(price_sek)) return res.status(400).json({ error: 'skin_name and numeric price_sek required' });
+  const { skin_name, price, currency } = req.body;
+  if (!skin_name || price == null || isNaN(price)) return res.status(400).json({ error: 'skin_name and numeric price required' });
+  const price_sek = await toSEK(parseFloat(price), currency || 'SEK');
   const { error } = await supabase.from('cs_price_overrides').upsert(
-    { user_id: req.user.id, skin_name, price_sek: parseFloat(price_sek) },
+    { user_id: req.user.id, skin_name, price_sek },
     { onConflict: 'user_id,skin_name' }
   );
   if (error) return res.status(500).json({ error: error.message });
@@ -1147,6 +1192,7 @@ app.delete('/api/cs/prices/override/:skinName', requireUser, async (req, res) =>
 
 app.get('/api/cs/steam/inventory/:steamId', requireUser, async (req, res) => {
   if (!/^\d{17}$/.test(req.params.steamId)) return res.status(400).json({ error: 'Invalid Steam ID' });
+  const BC = (req.query.currency || 'SEK').toUpperCase();
   try {
     const data = await fetchJSON(`https://steamcommunity.com/inventory/${req.params.steamId}/730/2?l=english&count=500`);
     if (!data?.assets) return res.status(404).json({ error:'Inventory not found or private' });
@@ -1172,11 +1218,14 @@ app.get('/api/cs/steam/inventory/:steamId', requireUser, async (req, res) => {
     // Shared Steam Market fetch helpers
     const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
     let usdToSek = 10.5;
-    if (allMissing.length > 0) {
+    let bcRate = 1; // SEK→BC conversion rate (populated after usdToSek fetch)
+    if (allMissing.length > 0 || BC !== 'SEK') {
       try {
-        const fx = await fetch('https://api.frankfurter.app/latest?from=USD&to=SEK');
+        const targets = BC !== 'SEK' ? `SEK,${BC}` : 'SEK';
+        const fx = await fetch(`https://api.frankfurter.app/latest?from=USD&to=${targets}`);
         const fxd = await fx.json();
         usdToSek = fxd?.rates?.SEK || usdToSek;
+        if (BC !== 'SEK' && fxd?.rates?.[BC]) bcRate = (fxd.rates[BC]) / usdToSek;
       } catch(e) {}
     }
 
@@ -1321,11 +1370,12 @@ app.get('/api/cs/steam/inventory/:steamId', requireUser, async (req, res) => {
       const name = desc?.market_hash_name || desc?.name || 'Unknown';
       const tags = parseSteamTags(desc?.tags);
       const stickers = parseSteamStickers(desc?.descriptions);
+      const priceSEK = overrideMap[name] ?? priceMap[name]?.price_sek ?? 0;
       return {
         assetId: asset.assetid, name,
         iconUrl: desc?.icon_url ? `https://community.cloudflare.steamstatic.com/economy/image/${desc.icon_url}/360x360` : null,
         tradable: desc?.tradable === 1, type: desc?.type || '',
-        priceSEK: overrideMap[name] ?? priceMap[name]?.price_sek ?? 0,
+        price: parseFloat((priceSEK * bcRate).toFixed(2)),
         isOverride: name in overrideMap,
         exterior: tags.exterior || null, quality: tags.quality || null,
         rarity: tags.rarity || null, rarityColor: tags.rarityColor || null, stickers,
@@ -1333,7 +1383,7 @@ app.get('/api/cs/steam/inventory/:steamId', requireUser, async (req, res) => {
     }).filter(i => i.name !== 'Unknown');
 
     const items = buildItems();
-    res.json({ items, totalValue: items.reduce((s,i)=>s+i.priceSEK,0), count: items.length, pricingPending: bgBatch.length > 0 });
+    res.json({ items, totalValue: items.reduce((s,i)=>s+i.price,0), count: items.length, pricingPending: bgBatch.length > 0, display_currency: BC });
 
     // Background: fetch remaining items after response — skip if a job is already running
     if (bgBatch.length > 0 && !steamPriceLookupRunning) {
@@ -1364,6 +1414,7 @@ app.get('/api/cs/steam/inventory/:steamId', requireUser, async (req, res) => {
 });
 
 app.get('/api/cs/inventory', requireUser, async (req, res) => {
+  const BC = (req.query.currency || 'SEK').toUpperCase();
   const { data, error } = await supabase.from('cs_inventory').select('*, cs_sales(*)').eq('user_id', req.user.id).order('purchase_date', { ascending:false });
   if (error) { log.error('cs_inventory GET failed', { error: error.message, userId: req.user.id }); return res.status(500).json({ error: error.message }); }
   const items = data || [];
@@ -1373,7 +1424,36 @@ app.get('/api/cs/inventory', requireUser, async (req, res) => {
     const { data: prices } = await supabase.from('cs_price_cache').select('skin_name, price_sek, price_usd').in('skin_name', names);
     (prices || []).forEach(p => { priceMap[p.skin_name] = p; });
   }
-  res.json(items.map(item => ({ ...item, current_price_sek: priceMap[item.skin_name]?.price_sek || 0, sale_price: item.cs_sales?.[0]?.sale_price, sale_date: item.cs_sales?.[0]?.sale_date })));
+  // Build FX: sale currencies + BC if not SEK. fxFromSEK[cur] = how many `cur` per 1 SEK.
+  const saleCurrencies = [...new Set(items.map(i => i.cs_sales?.[0]?.sale_currency).filter(c => c && c !== 'SEK'))];
+  const needFX = [...new Set([...saleCurrencies, ...(BC !== 'SEK' ? [BC] : [])])];
+  const fxFromSEK = { SEK: 1 };
+  if (needFX.length > 0) {
+    try {
+      const fx = await fetch(`https://api.frankfurter.app/latest?from=SEK&to=${needFX.join(',')}`);
+      const fxd = await fx.json();
+      Object.entries(fxd.rates || {}).forEach(([cur, rate]) => { fxFromSEK[cur] = rate; });
+    } catch(e) {}
+  }
+  const bcRate = fxFromSEK[BC] || 1;
+  const sekToBC = (sekAmt) => sekAmt != null ? parseFloat(((sekAmt || 0) * bcRate).toFixed(2)) : null;
+  const salePriceBC = (item) => {
+    const sale = item.cs_sales?.[0];
+    if (!sale?.sale_price) return null;
+    const saleCur = sale.sale_currency || 'SEK';
+    const toSEKRate = saleCur === 'SEK' ? 1 : (1 / (fxFromSEK[saleCur] || 1));
+    return parseFloat((sale.sale_price * toSEKRate * bcRate).toFixed(2));
+  };
+  res.json(items.map(item => ({
+    ...item,
+    current_price: sekToBC(priceMap[item.skin_name]?.price_sek || 0),
+    purchase_price_display: sekToBC(item.purchase_price_sek || item.purchase_price),
+    sale_price_display: salePriceBC(item),
+    sale_price: item.cs_sales?.[0]?.sale_price,
+    sale_currency: item.cs_sales?.[0]?.sale_currency || null,
+    sale_date: item.cs_sales?.[0]?.sale_date,
+    display_currency: BC,
+  })));
 });
 
 async function toSEK(amount, currency) {
@@ -1451,8 +1531,9 @@ app.get('/api/cs/steam/screenshot/:id', requireUser, async (req, res) => {
 });
 
 app.get('/api/cs/pnl', requireUser, async (req, res) => {
+  const BC = (req.query.currency || 'SEK').toUpperCase();
   const [{ data: sold }, { data: holding }] = await Promise.all([
-    supabase.from('cs_inventory').select('purchase_price, purchase_price_sek, cs_sales(sale_price)').eq('user_id', req.user.id).eq('sold', true),
+    supabase.from('cs_inventory').select('purchase_price, purchase_price_sek, cs_sales(sale_price, sale_currency)').eq('user_id', req.user.id).eq('sold', true),
     supabase.from('cs_inventory').select('id, skin_name, purchase_price, purchase_price_sek').eq('user_id', req.user.id).eq('sold', false),
   ]);
   const holdingItems = holding || [];
@@ -1462,10 +1543,38 @@ app.get('/api/cs/pnl', requireUser, async (req, res) => {
     const { data: prices } = await supabase.from('cs_price_cache').select('skin_name, price_sek').in('skin_name', names);
     (prices || []).forEach(p => { priceMap[p.skin_name] = p.price_sek; });
   }
+  const saleCurrencies = [...new Set((sold||[]).map(r => r.cs_sales?.[0]?.sale_currency).filter(Boolean).filter(c => c !== 'SEK'))];
+  const needFX = [...new Set([...saleCurrencies, ...(BC !== 'SEK' ? [BC] : [])])];
+  const fxFromSEK = { SEK: 1 };
+  if (needFX.length > 0) {
+    try {
+      const fx = await fetch(`https://api.frankfurter.app/latest?from=SEK&to=${needFX.join(',')}`);
+      const fxd = await fx.json();
+      Object.entries(fxd.rates || {}).forEach(([cur, rate]) => { fxFromSEK[cur] = rate; });
+    } catch(e) {}
+  }
+  const bcRate = fxFromSEK[BC] || 1;
+  const sekToBC = (sekAmt) => parseFloat(((sekAmt || 0) * bcRate).toFixed(2));
+  const saleToBC = (amount, currency) => {
+    const cur = currency || 'SEK';
+    const toSEKRate = cur === 'SEK' ? 1 : (1 / (fxFromSEK[cur] || 1));
+    return parseFloat(((amount || 0) * toSEKRate * bcRate).toFixed(2));
+  };
   const costOf = r => r.purchase_price_sek || r.purchase_price;
-  const realised = (sold||[]).reduce((s,r) => s + ((r.cs_sales?.[0]?.sale_price||0) - costOf(r)), 0);
-  const unrealised = holdingItems.reduce((s,r) => s + ((priceMap[r.skin_name]||0) - costOf(r)), 0);
-  res.json({ realised, unrealised, totalInvested: holdingItems.reduce((s,r) => s + costOf(r), 0), currentValue: holdingItems.reduce((s,r) => s + (priceMap[r.skin_name]||0), 0), totalPnl: realised + unrealised, soldCount: (sold||[]).length, holdingCount: holdingItems.length });
+  const realised = (sold||[]).reduce((s,r) => {
+    const sale = r.cs_sales?.[0];
+    return s + (saleToBC(sale?.sale_price, sale?.sale_currency) - sekToBC(costOf(r)));
+  }, 0);
+  const unrealised = holdingItems.reduce((s,r) => s + (sekToBC(priceMap[r.skin_name]||0) - sekToBC(costOf(r))), 0);
+  res.json({
+    realised: parseFloat(realised.toFixed(2)),
+    unrealised: parseFloat(unrealised.toFixed(2)),
+    totalInvested: sekToBC(holdingItems.reduce((s,r) => s + costOf(r), 0)),
+    currentValue: sekToBC(holdingItems.reduce((s,r) => s + (priceMap[r.skin_name]||0), 0)),
+    totalPnl: parseFloat((realised + unrealised).toFixed(2)),
+    soldCount: (sold||[]).length, holdingCount: holdingItems.length,
+    display_currency: BC,
+  });
 });
 
 // ── Admin routes ─────────────────────────────────────────────────────────────

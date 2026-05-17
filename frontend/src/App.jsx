@@ -45,7 +45,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('overview');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [selectedForRemoval, setSelectedForRemoval] = useState([]);
-  const [dividends, setDividends] = useState(() => apiCache.get('/api/dividends'));
+  const [dividends, setDividends] = useState(() => apiCache.get(`/api/dividends?currency=${baseCurrency}`));
   const [overrides, setOverrides] = useState(() => apiCache.get('/api/overrides') || {});
   const [overrideIsin, setOverrideIsin] = useState('');
   const [overrideTicker, setOverrideTicker] = useState('');
@@ -219,13 +219,13 @@ export default function App() {
         p.length > 0
           ? apiFetch('/api/portfolio', { method: 'POST', body: JSON.stringify({ portfolio: p, baseCurrency: c }) }).then(r => r.json())
           : Promise.resolve(null),
-        apiFetch('/api/dividends').then(r => r.json()),
+        apiFetch(`/api/dividends?currency=${c}`).then(r => r.json()),
         apiFetch('/api/transactions/count').then(r => r.json()),
         apiFetch('/api/overrides').then(r => r.json()),
       ]);
       setDashboardData(dashRes); setDividends(divRes); setTxCount(txRes); setOverrides(overRes);
       if (dashRes) { apiCache.set('/api/portfolio-dashboard', dashRes); apiCache.set('/api/portfolio-fingerprint', fp); }
-      apiCache.set('/api/dividends', divRes);
+      apiCache.set(`/api/dividends?currency=${c}`, divRes);
       apiCache.set('/api/txCount', txRes);
       apiCache.set('/api/overrides', overRes);
     } catch(e) { console.error(e); }
@@ -292,9 +292,9 @@ export default function App() {
   const fetchTxHistory = useCallback(async () => {
     if (!authUsername) return;
     setTxHistoryLoading(true);
-    try { const res = await apiFetch('/api/transactions'); setTxHistory(await res.json()); }
+    try { const res = await apiFetch(`/api/transactions?currency=${baseCurrency}`); setTxHistory(await res.json()); }
     catch(e) {} finally { setTxHistoryLoading(false); }
-  }, [authUsername, apiFetch]);
+  }, [authUsername, baseCurrency, apiFetch]);
 
   // ── Actions ────────────────────────────────────────────────────────────────
   const readFile = file => new Promise(resolve => {
@@ -911,8 +911,8 @@ const handleUpload = async (files) => {
                           <div className={`${cardCls} p-6`}>
                             <h3 className={`text-sm font-bold ${isDark ? 'text-gray-400' : 'text-gray-500'} uppercase tracking-wider mb-6`}>Dividend Dashboard</h3>
                             <div className="grid grid-cols-2 gap-4 mb-8">
-                              <div className={`${isDark ? 'bg-gray-900' : 'bg-gray-50'} rounded-xl p-4`}><p className={`text-xs font-bold uppercase mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>All-Time</p><p className="text-3xl font-bold">{fmt(dividends.totalAllTime)} kr</p></div>
-                              <div className={`${isDark ? 'bg-gray-900' : 'bg-gray-50'} rounded-xl p-4`}><p className={`text-xs font-bold uppercase mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>This Year</p><p className="text-3xl font-bold">{fmt(dividends.totalThisYear)} kr</p></div>
+                              <div className={`${isDark ? 'bg-gray-900' : 'bg-gray-50'} rounded-xl p-4`}><p className={`text-xs font-bold uppercase mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>All-Time</p><p className="text-3xl font-bold">{fmtSym(dividends.totalAllTime)}</p></div>
+                              <div className={`${isDark ? 'bg-gray-900' : 'bg-gray-50'} rounded-xl p-4`}><p className={`text-xs font-bold uppercase mb-1 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>This Year</p><p className="text-3xl font-bold">{fmtSym(dividends.totalThisYear)}</p></div>
                             </div>
                             <div className="flex flex-col gap-1 mb-8">
                               {dividends.byYear.map(({ year, total, stocks }) => (
@@ -920,7 +920,7 @@ const handleUpload = async (files) => {
                                   <div onClick={() => setExpandedYear(expandedYear === year ? null : year)} className={`flex items-center gap-3 py-1 cursor-pointer rounded-lg px-2 ${isDark ? 'hover:bg-gray-700' : 'hover:bg-gray-50'} transition`}>
                                     <span className={`text-sm font-bold w-12 shrink-0 text-right ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>{year}</span>
                                     <div className={`flex-1 h-6 ${isDark ? 'bg-gray-700' : 'bg-gray-100'} rounded overflow-hidden`}><div className="h-full bg-slate-500 rounded" style={{ width: `${(total / Math.max(...dividends.byYear.map(y=>y.total))) * 100}%` }} /></div>
-                                    <span className={`text-sm font-bold w-28 text-right shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>{fmt(total)} kr</span>
+                                    <span className={`text-sm font-bold w-28 text-right shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>{fmtSym(total)}</span>
                                     <span className={`text-xs w-4 shrink-0 text-center ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>{expandedYear === year ? '▲' : '▼'}</span>
                                   </div>
                                   <div style={{ maxHeight: expandedYear === year ? `${(stocks?.length || 0) * 28 + 16}px` : '0px', overflow: 'hidden', transition: 'max-height 0.3s ease' }}>
@@ -929,7 +929,7 @@ const handleUpload = async (files) => {
                                         <div key={name} className="flex items-center gap-3">
                                           <span className={`text-xs w-44 shrink-0 truncate ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{name}</span>
                                           <div className={`flex-1 h-4 ${isDark ? 'bg-gray-700' : 'bg-gray-100'} rounded overflow-hidden`}><div className="h-full bg-slate-600 rounded" style={{ width: `${(sTotal / (stocks[0]?.total || 1)) * 100}%` }} /></div>
-                                          <span className={`text-xs w-24 text-right shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>{fmt(sTotal)} kr</span>
+                                          <span className={`text-xs w-24 text-right shrink-0 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>{fmtSym(sTotal)}</span>
                                         </div>
                                       ))}
                                     </div>
@@ -1061,7 +1061,7 @@ const handleUpload = async (files) => {
                         <div className="overflow-x-auto">
                           <table className="w-full text-left text-sm">
                             <thead className={`${isDark ? 'bg-gray-900 border-gray-700' : 'bg-gray-50 border-gray-200'} border-b`}>
-                              <tr>{['Date','Type','Ticker','Name','Qty','Price','Total (SEK)'].map(h => <th key={h} className={`p-3 font-bold text-xs ${isDark ? 'text-gray-400' : 'text-gray-400'} uppercase tracking-wider`}>{h}</th>)}</tr>
+                              <tr>{['Date','Type','Ticker','Name','Qty','Price',`Total (${sym})`].map(h => <th key={h} className={`p-3 font-bold text-xs ${isDark ? 'text-gray-400' : 'text-gray-400'} uppercase tracking-wider`}>{h}</th>)}</tr>
                             </thead>
                             <tbody>
                               {txHistory.slice(0, 500).map((tx, i) => (
@@ -1072,7 +1072,7 @@ const handleUpload = async (files) => {
                                   <td className="p-3 truncate max-w-xs">{tx.name}</td>
                                   <td className="p-3">{tx.quantity}</td>
                                   <td className="p-3">{fmt(tx.price)}</td>
-                                  <td className={`p-3 font-bold ${tx.totalSEK >= 0 ? 'text-green-400' : 'text-red-400'}`}>{fmt(tx.totalSEK)}</td>
+                                  <td className={`p-3 font-bold ${tx.total >= 0 ? 'text-green-400' : 'text-red-400'}`}>{fmt(tx.total)}</td>
                                 </tr>
                               ))}
                             </tbody>
