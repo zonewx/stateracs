@@ -68,7 +68,7 @@ export default function SettingsPage({ isDark, baseCurrency, onSetBaseCurrency }
 
   return (
     <div className={`flex-1 overflow-y-auto p-6 ${isDark ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-900'}`}>
-      <div className="max-w-xl mx-auto w-full flex flex-col gap-6">
+      <div className="max-w-4xl mx-auto w-full flex flex-col gap-6">
         <h1 className="text-2xl font-bold">Settings</h1>
 
         <div className={card}>

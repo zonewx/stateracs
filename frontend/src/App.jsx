@@ -738,7 +738,7 @@ const handleUpload = async (files) => {
         {showShortcuts && <ShortcutsModal />}
 
         <div className="flex-1 overflow-y-auto">
-          <div className="max-w-[1440px] mx-auto px-10 py-6">
+          <div className="max-w-4xl mx-auto px-6 py-6">
             {isAppLoading ? (
               <div className="flex flex-col items-center justify-center mt-32 space-y-4">
                 <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"/>
@@ -747,7 +747,7 @@ const handleUpload = async (files) => {
             ) : (
               <>
                 {currentTab === 'import' && (
-                  <div className="max-w-xl flex flex-col gap-5">
+                  <div className="flex flex-col gap-5">
                     <h2 className="text-xl font-bold">Import CSV</h2>
                     <div className={`${cardCls} p-5 flex flex-col gap-4`}>
                       <label className={`flex items-center justify-center gap-2 py-3 px-4 rounded-xl cursor-pointer font-semibold text-sm transition ${uploadLoading ? 'opacity-50 cursor-not-allowed bg-gray-700 text-gray-400' : 'bg-blue-600 hover:bg-blue-500 text-white'}`}>
@@ -794,7 +794,7 @@ const handleUpload = async (files) => {
                 )}
 
                 {currentTab === 'manage' && (
-                  <div className="max-w-xl flex flex-col gap-5">
+                  <div className="flex flex-col gap-5">
                     <h2 className="text-xl font-bold">Manage Holdings</h2>
                     <div className={`${cardCls} p-5 flex flex-col gap-4`}>
                       {portfolio.length === 0 ? (
@@ -825,7 +825,7 @@ const handleUpload = async (files) => {
                 )}
 
                 {currentTab === 'settings' && (
-                  <div className="max-w-xl flex flex-col gap-5">
+                  <div className="flex flex-col gap-5">
                     <h2 className="text-xl font-bold">Settings</h2>
                     <div className={`${cardCls} p-5 flex flex-col gap-5`}>
                       <div>
@@ -853,7 +853,7 @@ const handleUpload = async (files) => {
                 )}
 
                 {currentTab === 'danger' && (
-                  <div className="max-w-xl flex flex-col gap-5">
+                  <div className="flex flex-col gap-5">
                     <h2 className="text-xl font-bold">Danger Zone</h2>
                     <div className={`${cardCls} p-5 flex flex-col gap-4`}>
                       <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>These actions cannot be undone.</p>
