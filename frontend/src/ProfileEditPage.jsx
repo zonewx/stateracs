@@ -219,7 +219,7 @@ export default function ProfileEditPage({ isDark, authUsername }) {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="px-10 py-8">
+      <div className="max-w-[1440px] mx-auto px-10 py-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div>

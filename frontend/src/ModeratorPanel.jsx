@@ -131,7 +131,7 @@ export default function ModeratorPanel({ isDark, authUsername, userRole }) {
         </div>
       )}
 
-      <div className="px-10 py-8">
+      <div className="max-w-[1440px] mx-auto px-10 py-8">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-2">🛡 Moderator Panel</h1>

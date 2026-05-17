@@ -66,7 +66,7 @@ export default function App() {
   const [syncLoading, setSyncLoading] = useState(false);
   const [resolveLoading, setResolveLoading] = useState(false);
   const [resolveStatus, setResolveStatus] = useState('');
-  const [todaySortMode, setTodaySortMode] = useState('pct');
+  const [todaySortMode, setTodaySortMode] = useState('currency');
   const [todayCogOpen, setTodayCogOpen] = useState(false);
   const [ownershipData, setOwnershipData] = useState({});
   const [ownershipLoading, setOwnershipLoading] = useState(false);
@@ -88,6 +88,7 @@ export default function App() {
   const [selectedBroker, setSelectedBroker] = useState('auto');
   const [txCount, setTxCount] = useState(() => apiCache.get('/api/txCount') || { total: 0, trades: 0, byBroker: {} });
   const uploadAbortRef = useRef(false);
+  const uploadAbortControllerRef = useRef(null);
 
   // ── API helper ─────────────────────────────────────────────────────────────
   const apiFetch = useCallback(async (url, opts = {}) => {
@@ -324,6 +325,7 @@ export default function App() {
 const handleUpload = async (files) => {
   if (!files.length) return;
   uploadAbortRef.current = false;
+  uploadAbortControllerRef.current = new AbortController();
   setUploadLoading(true); setUploadStatus(null); setSyncStatus(''); setUploadProgress(null);
   
   const updateProgress = (phase, pct, label) => setUploadProgress({ phase, pct, label });
@@ -377,39 +379,46 @@ const handleUpload = async (files) => {
 
       try {
         const chunkStart = Date.now();
-        const chunkRes = await apiFetch('/api/transactions/resolve', { 
-          method: 'POST', 
-          body: JSON.stringify({ limit: CHUNK_SIZE }) 
+        const chunkRes = await apiFetch('/api/transactions/resolve', {
+          method: 'POST',
+          body: JSON.stringify({ limit: CHUNK_SIZE }),
+          signal: uploadAbortControllerRef.current?.signal,
         });
-        
+
         // Check if request took too long
         if (Date.now() - chunkStart > 25000) {
           console.warn('Chunk took over 25s, might be timing out');
         }
-        
+
         const chunkData = await chunkRes.json();
-        
+
         totalResolved += chunkData.resolved || 0;
         remaining = chunkData.remaining || 0;
         failures = 0; // Reset failure count on success
-        
+
         const progress = 40 + Math.floor(((totalResolved / data.newAdded) * 40));
-        
+
         // Calculate ETA
         const elapsed = (Date.now() - startTime) / 1000; // seconds
         const rate = totalResolved / elapsed; // tickers per second
         const etaSeconds = remaining > 0 && rate > 0 ? Math.ceil(remaining / rate) : 0;
-        const etaText = etaSeconds > 60 
-          ? `~${Math.ceil(etaSeconds / 60)}m remaining` 
-          : etaSeconds > 0 
-            ? `~${etaSeconds}s remaining` 
+        const etaText = etaSeconds > 60
+          ? `~${Math.ceil(etaSeconds / 60)}m remaining`
+          : etaSeconds > 0
+            ? `~${etaSeconds}s remaining`
             : '';
-        
+
         updateProgress('resolving', progress, `Resolved ${totalResolved}/${data.newAdded} tickers... ${etaText}`);
-        
+
         if (remaining === 0) break;
         await new Promise(r => setTimeout(r, 200)); // Small delay between chunks
       } catch (err) {
+        if (err.name === 'AbortError') {
+          updateProgress('cancelled', 40 + Math.floor((totalResolved / data.newAdded) * 40), '✗ Upload cancelled');
+          setTimeout(() => setUploadProgress(null), 2000);
+          setUploadLoading(false);
+          return;
+        }
         failures++;
         console.error(`Chunk failed (attempt ${failures}/3):`, err);
         if (failures >= 3) {
@@ -640,20 +649,19 @@ const handleUpload = async (files) => {
     const sorted = [...data].sort((a, b) => sortMode === 'currency' ? b.todayGainBase - a.todayGainBase : b.todayChangePct - a.todayChangePct);
     const best = sorted.slice(0, 3), worst = [...sorted].reverse().slice(0, 3);
     const Card = ({ s }) => {
-      const showPct = sortMode !== 'currency';
-      const pos = showPct ? s.todayChangePct >= 0 : s.todayGainBase >= 0;
+      const pos = s.todayChangePct >= 0;
       return (
         <div className={`bg-gray-900 rounded-xl p-4 border ${pos ? 'border-green-800' : 'border-red-800'} flex flex-col gap-2`}>
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-gray-400 font-bold uppercase truncate">{s.ticker}</span>
+            <span className="text-xs text-gray-100 font-bold uppercase truncate">{s.ticker}</span>
             <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${pos ? 'bg-green-900 text-green-400' : 'bg-red-900 text-red-400'}`}>
-              {showPct ? `${s.todayChangePct >= 0 ? '+' : ''}${s.todayChangePct.toFixed(2)}%` : `${s.todayGainBase >= 0 ? '+' : ''}${fmtSym(s.todayGainBase)}`}
+              {`${s.todayChangePct >= 0 ? '+' : ''}${s.todayChangePct.toFixed(2)}%`}
             </span>
           </div>
           <div className="text-sm font-bold text-white truncate">{s.flag} {s.name}</div>
-          <div className="text-xs text-gray-400">{fmt(s.nativePrice)} {s.currency}</div>
-          <div className={`text-xs text-gray-500`}>
-            {showPct ? `${s.todayGainBase >= 0 ? '+' : ''}${fmtSym(s.todayGainBase)}` : `${s.todayChangePct >= 0 ? '+' : ''}${s.todayChangePct.toFixed(2)}%`}
+          <div className="text-xs text-gray-300">{fmt(s.nativePrice)} {s.currency}</div>
+          <div className={`text-xs font-semibold ${pos ? 'text-green-400' : 'text-red-400'}`}>
+            {`${s.todayGainBase >= 0 ? '+' : ''}${fmtSym(s.todayGainBase)}`}
           </div>
         </div>
       );
@@ -712,7 +720,7 @@ const handleUpload = async (files) => {
         {showShortcuts && <ShortcutsModal />}
 
         <div className="flex-1 overflow-y-auto">
-          <div className="px-10 py-6">
+          <div className="max-w-[1440px] mx-auto px-10 py-6">
             {isAppLoading ? (
               <div className="flex flex-col items-center justify-center mt-32 space-y-4">
                 <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"/>
@@ -861,7 +869,7 @@ const handleUpload = async (files) => {
                             </div>
                           )}
                           <button
-                            onClick={() => { uploadAbortRef.current = true; }}
+                            onClick={() => { uploadAbortRef.current = true; uploadAbortControllerRef.current?.abort(); }}
                             className="mt-2 text-xs text-red-400 hover:text-red-300 font-semibold transition"
                           >
                             Cancel
@@ -969,7 +977,7 @@ const handleUpload = async (files) => {
                           <tbody>
                             {rows.map(s => (
                               <tr key={s.ticker} className={`border-t ${isDark ? 'border-gray-700 hover:bg-gray-700/30' : 'border-gray-100 hover:bg-gray-50'} transition`}>
-                                <td className="p-4 font-bold">{s.flag} {s.cleanName || s.name}</td>
+                                <td className="p-4 font-bold"><span className="flex items-center gap-2">{s.flag}<span>{s.cleanName || s.name}</span></span></td>
                                 <td className={`p-4 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>{s.ticker}</td>
                                 <td className="p-4 whitespace-nowrap">{fmt(s.nativePrice)} {s.currency}</td>
                                 <td className={`p-4 font-bold whitespace-nowrap ${s.todayChangePct >= 0 ? 'text-green-400' : 'text-red-400'}`}>{s.todayChangePct >= 0 ? '+' : ''}{s.todayChangePct.toFixed(2)}%</td>
@@ -1191,7 +1199,7 @@ const handleUpload = async (files) => {
         onClearTransactions: handleClearTransactions,
         onClearAll: handleClearAll,
         onClearBroker: handleClearBroker,
-        onCancelUpload: () => { uploadAbortRef.current = true; },
+        onCancelUpload: () => { uploadAbortRef.current = true; uploadAbortControllerRef.current?.abort(); },
       }}
     />
       

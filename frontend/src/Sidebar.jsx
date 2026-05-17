@@ -315,7 +315,7 @@ export default function Sidebar({ currentUser, onLogout, isDark, selectedBroker,
 
   const isActive = (path) => {
     if (!path) return false;
-    return location.pathname === path || location.pathname.startsWith(path + '/');
+    return location.pathname === path;
   };
 
   // Auto-expand parent when navigating directly to a child route

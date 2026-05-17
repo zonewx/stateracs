@@ -796,17 +796,21 @@ app.post('/api/portfolio', requireUser, async (req, res) => {
   const fromSEK=(amount)=>{ if(BC==='SEK') return amount; return fxRates[`${BC}SEK=X`]?amount/fxRates[`${BC}SEK=X`]:amount; };
   const FLAGS={ST:'🇸🇪',OL:'🇳🇴',CO:'🇩🇰',HE:'🇫🇮',AS:'🇳🇱',PA:'🇫🇷',DE:'🇩🇪',L:'🇬🇧',MI:'🇮🇹',MC:'🇪🇸',SW:'🇨🇭',TO:'🇨🇦',AX:'🇦🇺',HK:'🇭🇰',T:'🇯🇵'};
   const getFlag=(t)=>{ const p=t.split('.'); return p.length>1?(FLAGS[p[p.length-1]]||'🇺🇸'):'🇺🇸'; };
-  const cleanName=(name)=>{
+  const getShareClass=(ticker)=>{ const m=ticker.match(/^[^-]+-([A-Ca-c])(?:\.|$)/); return m?m[1].toUpperCase():null; };
+  const cleanName=(name,ticker)=>{
     if (!name) return name;
-    return name
-      .replace(/\s*\(publ\.?\)/gi, '')  // (publ) or (publ.)
-      .replace(/\s*\(AB\)/gi, '')       // (AB)
-      .replace(/\bAB\b(?!\w)/gi, '')    // AB at end of name
-      .replace(/\bpubl\.?\b/gi, '')     // publ or publ.
+    let cleaned = name
+      .replace(/\s*\(publ\.?\)/gi, '')
+      .replace(/\s*\(AB\)/gi, '')
+      .replace(/\bAB\b(?!\w)/gi, '')
+      .replace(/\bpubl\.?\b/gi, '')
       .replace(/\b(ASA|AS|A\/S|SE|Inc\.?|Inc|Corp\.?|Ltd\.?|Limited|PLC|N\.V\.|S\.A\.|GmbH|AG)\b/gi, '')
-      .replace(/\s*[.,;]\s*$/g, '')     // Remove trailing punctuation
-      .replace(/\s+/g, ' ')             // Normalize whitespace
+      .replace(/\s*[.,;]\s*$/g, '')
+      .replace(/\s+/g, ' ')
       .trim();
+    const shareClass = ticker ? getShareClass(ticker) : null;
+    if (shareClass && !new RegExp(`\\b${shareClass}$`).test(cleaned)) cleaned += ` ${shareClass}`;
+    return cleaned;
   };
   const results=[];
   for (const h of portfolio) {
@@ -815,7 +819,7 @@ app.post('/api/portfolio', requireUser, async (req, res) => {
       if (!q) continue;
       const nativePrice=q.regularMarketPrice||0, prevClose=q.regularMarketPreviousClose||nativePrice, currency=q.currency||'SEK';
       const currentValueBase=fromSEK(toSEK(nativePrice*h.quantity,currency)), costBase=fromSEK(toSEK((h.avgPrice||0)*h.quantity,currency)), profitBase=currentValueBase-costBase;
-      results.push({ ticker:h.ticker, name:q.longName||q.shortName||h.ticker, cleanName:cleanName(q.longName||q.shortName||h.ticker), flag:getFlag(h.ticker), currency, quantity:h.quantity, nativePrice, avgPrice:h.avgPrice||0, currentValue:currentValueBase, profit:profitBase, returnPct:costBase>0?(profitBase/costBase)*100:0, todayChangePct:prevClose>0?((nativePrice-prevClose)/prevClose)*100:0, todayGainBase:fromSEK(toSEK((nativePrice-prevClose)*h.quantity,currency)), sector:q.sector||'Unknown', quoteType:q.quoteType });
+      results.push({ ticker:h.ticker, name:q.longName||q.shortName||h.ticker, cleanName:cleanName(q.longName||q.shortName||h.ticker,h.ticker), flag:getFlag(h.ticker), currency, quantity:h.quantity, nativePrice, avgPrice:h.avgPrice||0, currentValue:currentValueBase, profit:profitBase, returnPct:costBase>0?(profitBase/costBase)*100:0, todayChangePct:prevClose>0?((nativePrice-prevClose)/prevClose)*100:0, todayGainBase:fromSEK(toSEK((nativePrice-prevClose)*h.quantity,currency)), sector:q.sector||'Unknown', quoteType:q.quoteType });
     } catch(e) { log.warn('portfolio quote failed', { ticker: h.ticker, error: e.message }); }
   }
   const totalValue=results.reduce((s,r)=>s+r.currentValue,0), totalCost=results.reduce((s,r)=>s+fromSEK(toSEK((r.avgPrice||0)*r.quantity,r.currency)),0), totalProfit=totalValue-totalCost;

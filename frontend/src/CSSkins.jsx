@@ -501,7 +501,7 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
 
   return (
     <div className={`flex flex-col flex-1 overflow-y-auto ${isDark ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-900'}`}>
-      <div className="px-10 py-8 w-full">
+      <div className="max-w-[1440px] mx-auto px-10 py-8 w-full">
 
           {/* OVERVIEW */}
           {tab === 'overview' && (
@@ -615,18 +615,7 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
           {/* STEAM INVENTORY TAB */}
           {tab === 'inventory' && (
             <div className="flex flex-col gap-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-lg font-bold">Steam Inventory</h2>
-                <select
-                  value={invSort}
-                  onChange={e => setInvSort(e.target.value)}
-                  className={`px-2 py-1.5 rounded-lg border text-xs outline-none ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'}`}
-                >
-                  <option value="default">Inventory order</option>
-                  <option value="price-desc">Price: High → Low</option>
-                  <option value="price-asc">Price: Low → High</option>
-                </select>
-              </div>
+              <h2 className="text-lg font-bold">Steam Inventory</h2>
               {!settings.steam_id && (
                 <div className={`${card} p-6 text-center`}>
                   <p className={`text-sm mb-1 font-semibold`}>No Steam account linked</p>
@@ -646,9 +635,20 @@ export default function CSSkins({ isDark, authUsername, baseCurrency = 'SEK' }) 
                   : tradable;
                 return (
                   <>
-                    <div className={`${card} p-4 flex gap-6`}>
-                      <div><p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} mb-1`}>Tradable items</p><p className="text-2xl font-bold">{tradable.length}</p></div>
-                      <div><p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} mb-1`}>Estimated value</p><p className="text-2xl font-bold text-green-400">{fmtBC(tradable.reduce((s,i)=>s+i.price,0))}</p></div>
+                    <div className={`${card} p-4 flex items-center justify-between`}>
+                      <div className="flex gap-6">
+                        <div><p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} mb-1`}>Tradable items</p><p className="text-2xl font-bold">{tradable.length}</p></div>
+                        <div><p className={`text-xs ${isDark ? 'text-gray-500' : 'text-gray-400'} mb-1`}>Estimated value</p><p className="text-2xl font-bold text-green-400">{fmtBC(tradable.reduce((s,i)=>s+i.price,0))}</p></div>
+                      </div>
+                      <select
+                        value={invSort}
+                        onChange={e => setInvSort(e.target.value)}
+                        className={`px-2 py-1.5 rounded-lg border text-xs outline-none ${isDark ? 'bg-gray-700 border-gray-600 text-white' : 'bg-gray-50 border-gray-200 text-gray-900'}`}
+                      >
+                        <option value="default">Inventory order</option>
+                        <option value="price-desc">Price: High → Low</option>
+                        <option value="price-asc">Price: Low → High</option>
+                      </select>
                     </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                       {sorted.map((item, i) => (
